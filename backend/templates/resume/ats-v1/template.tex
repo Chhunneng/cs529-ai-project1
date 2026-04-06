@@ -1,0 +1,33 @@
+% ATS-friendly minimal template — content filled from validated JSON (escape in renderer).
+\documentclass[11pt,letterpaper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\geometry{margin=0.75in}
+\setlist[itemize]{leftmargin=*,nosep,topsep=2pt}
+\pagestyle{empty}
+\begin{document}
+
+\begin{center}
+{\Large \textbf{<<FULL_NAME>>}}\\
+<<EMAIL>> \quad | \quad <<PHONE>> \quad | \quad <<LOCATION>>\\
+<<LINKS>>
+\end{center}
+
+\vspace{8pt}
+\section*{Summary}
+<<SUMMARY>>
+
+\section*{Experience}
+<<EXPERIENCE>>
+
+\section*{Education}
+<<EDUCATION>>
+
+\section*{Skills}
+<<SKILLS>>
+
+\end{document}

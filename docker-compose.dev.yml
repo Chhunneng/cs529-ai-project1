@@ -1,0 +1,49 @@
+# Development overrides: bind-mount source and auto-restart on changes.
+# Use: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# or: make dev
+
+services:
+  backend:
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/app
+      - --reload-dir
+      - /app/templates
+    volumes:
+      - ./backend:/app
+
+  worker:
+    command:
+      - python
+      - -m
+      - watchfiles
+      - --filter
+      - python
+      - python -m app.worker
+      - /app/app
+    volumes:
+      - ./worker/app:/app/app
+      - ./backend/templates:/app/templates
+
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - frontend_dev_node_modules:/app/node_modules
+      - frontend_dev_next:/app/.next
+    command:
+      - sh
+      - -c
+      - |
+        if [ ! -f node_modules/.bin/next ]; then npm ci; fi
+        exec npm run dev -- --hostname 0.0.0.0 --port 3000
+
+volumes:
+  frontend_dev_node_modules:
+  frontend_dev_next:

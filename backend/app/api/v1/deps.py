@@ -33,7 +33,7 @@ async def get_resume_or_404(
 
 
 async def get_resume_template_or_404(
-    template_id: str, db: AsyncSession = Depends(get_db_session)
+    template_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)
 ) -> ResumeTemplate:
     result = await db.execute(select(ResumeTemplate).where(ResumeTemplate.id == template_id))
     template = result.scalar_one_or_none()

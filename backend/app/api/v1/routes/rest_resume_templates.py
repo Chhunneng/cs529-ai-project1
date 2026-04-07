@@ -1,6 +1,8 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,9 +33,7 @@ async def create_resume_template(
     body: ResumeTemplateCreateBody, db: AsyncSession = Depends(get_db_session)
 ) -> ResumeTemplateDetail:
     tpl = ResumeTemplate(
-        id=body.id,
         name=body.name,
-        storage_path=body.storage_path,
         latex_source=body.latex_source,
         schema_json=body.schema_json or {},
     )
@@ -58,8 +58,6 @@ async def patch_resume_template(
 ) -> ResumeTemplateDetail:
     if body.name is not None:
         template.name = body.name
-    if body.storage_path is not None:
-        template.storage_path = body.storage_path
     if body.latex_source is not None:
         template.latex_source = body.latex_source
     if body.schema_json is not None:
@@ -67,3 +65,17 @@ async def patch_resume_template(
     await db.commit()
     await db.refresh(template)
     return template
+
+
+@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_resume_template(
+    template_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_session),
+) -> None:
+    result = await db.execute(select(ResumeTemplate).where(ResumeTemplate.id == template_id))
+    template = result.scalar_one_or_none()
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+
+    await db.delete(template)
+    await db.commit()

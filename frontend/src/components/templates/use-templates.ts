@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   createResumeTemplate,
+  deleteResumeTemplate,
   getResumeTemplate,
   listResumeTemplates,
   patchResumeTemplate,
@@ -54,11 +55,10 @@ export function useTemplates(apiReady: boolean) {
   );
 
   const create = useCallback(
-    async (body: { id: string; name: string; latex_source: string; schema_json: Record<string, unknown> }) => {
+    async (body: { name: string; latex_source: string; schema_json: Record<string, unknown> }) => {
       if (!apiReady) throw new Error("API unavailable");
       setError(null);
       const tpl = await createResumeTemplate({
-        id: body.id,
         name: body.name,
         latex_source: body.latex_source,
         schema_json: body.schema_json,
@@ -86,6 +86,17 @@ export function useTemplates(apiReady: boolean) {
     [apiReady, refreshList],
   );
 
+  const remove = useCallback(
+    async (id: string) => {
+      if (!apiReady) throw new Error("API unavailable");
+      setError(null);
+      await deleteResumeTemplate(id);
+      await refreshList();
+      setActive(null);
+    },
+    [apiReady, refreshList],
+  );
+
   return {
     items,
     active,
@@ -94,6 +105,7 @@ export function useTemplates(apiReady: boolean) {
     loadDetail,
     create,
     save,
+    remove,
     loadingList,
     loadingDetail,
     error,

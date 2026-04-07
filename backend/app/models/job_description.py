@@ -16,4 +16,3 @@ class JobDescription(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     extracted_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-

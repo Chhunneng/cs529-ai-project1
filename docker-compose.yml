@@ -68,7 +68,6 @@ services:
       ARTIFACTS_DIR: ${ARTIFACTS_DIR:-/data/artifacts}
       LATEX_SERVICE_URL: ${LATEX_SERVICE_URL:-http://backend:8000/api/v1/internal}
       INTERNAL_COMPILE_TOKEN: ${INTERNAL_COMPILE_TOKEN:-}
-      TEMPLATES_BASE_DIR: ${TEMPLATES_BASE_DIR:-/app/templates}
     depends_on:
       postgres:
         condition: service_healthy

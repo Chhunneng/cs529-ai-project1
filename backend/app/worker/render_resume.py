@@ -18,7 +18,7 @@ from app.queue_jobs import RenderResumeJob
 from app.worker.latex_client import compile_tex_to_pdf
 from app.worker.openai_resume_fill import generate_resume_fill_json
 from app.worker.resume_fill_models import ResumeFillAtsV1
-from app.worker.tex_renderer import load_template_tex, render_ats_v1
+from app.worker.tex_renderer import render_ats_v1
 
 log = structlog.get_logger()
 
@@ -69,19 +69,22 @@ async def _fetch_render_context(output_id: uuid.UUID) -> dict[str, Any]:
     async with AsyncSessionMaker() as db:
         row = await db.execute(
             select(ResumeOutput, ResumeTemplate)
-            .join(ResumeTemplate, ResumeOutput.template_id == ResumeTemplate.id)
+            .outerjoin(ResumeTemplate, ResumeOutput.template_id == ResumeTemplate.id)
             .where(ResumeOutput.id == output_id)
         )
         first = row.first()
         if first is None:
             raise RuntimeError("resume_output not found")
         ro, rt = first[0], first[1]
+        if rt is None:
+            raise RuntimeError(
+                "Resume template was deleted or is missing; cannot render this output."
+            )
         return {
             "id": ro.id,
             "session_id": ro.session_id,
             "template_id": ro.template_id,
             "input_json": ro.input_json,
-            "storage_path": rt.storage_path,
             "schema_json": rt.schema_json,
             "latex_source": rt.latex_source,
         }
@@ -116,7 +119,6 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
     try:
         ctx = await _fetch_render_context(output_id)
         template_id = str(ctx["template_id"])
-        storage_path = str(ctx["storage_path"])
         latex_source = ctx.get("latex_source")
         schema_json: dict[str, Any] = ctx["schema_json"]
         session_id = ctx["session_id"]
@@ -146,21 +148,17 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
 
         fill_obj = await generate_resume_fill_json(
             schema=schema_json,
-            resume_context=resume_context or "(no structured resume on file — invent plausible placeholder content)",
+            resume_context=resume_context
+            or "(no structured resume on file — invent plausible placeholder content)",
             job_description_context=jd_context,
         )
 
-        if template_id != "ats-v1":
-            raise RuntimeError(f"Unsupported template for render: {template_id}")
-
         data = ResumeFillAtsV1.model_validate(fill_obj)
 
-        template_tex = None
-        if isinstance(latex_source, str) and latex_source.strip():
-            template_tex = latex_source
-        else:
-            base = Path(settings.templates_base_dir)
-            template_tex = load_template_tex(base, storage_path)
+        if not isinstance(latex_source, str) or not latex_source.strip():
+            raise RuntimeError(f"Template {template_id} has no LaTeX source in the database")
+
+        template_tex = latex_source.strip()
         tex_body = render_ats_v1(template_tex=template_tex, data=data)
 
         out_dir = Path(settings.artifacts_dir) / str(output_id)

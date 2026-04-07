@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from app.worker.resume_fill_models import ResumeFillAtsV1
 
 
@@ -80,8 +78,3 @@ def render_ats_v1(*, template_tex: str, data: ResumeFillAtsV1) -> str:
     out = out.replace("<<EDUCATION>>", education)
     out = out.replace("<<SKILLS>>", skills)
     return out
-
-
-def load_template_tex(base_dir: Path, storage_path: str) -> str:
-    path = base_dir / storage_path / "template.tex"
-    return path.read_text(encoding="utf-8")

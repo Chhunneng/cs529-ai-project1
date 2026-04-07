@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { pingBackend, type ResumeTemplateListItem } from "@/lib/api";
+import { pingBackend } from "@/lib/api";
 import { TemplateEditor } from "@/components/templates/template-editor";
 import { useTemplates } from "@/components/templates/use-templates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Trash2 } from "lucide-react";
 
 const NONE = "__none__";
 
@@ -36,10 +37,6 @@ function defaultSchema(): Record<string, unknown> {
     type: "object",
     properties: {},
   };
-}
-
-function listLabel(t: ResumeTemplateListItem) {
-  return `${t.name} (${t.id})`;
 }
 
 export function TemplatesManageCore({
@@ -65,8 +62,17 @@ export function TemplatesManageCore({
     };
   }, [active]);
 
-  const { items, active: activeTpl, loadDetail, create, save, loadingList, loadingDetail, error } =
-    useTemplates(apiReady && active);
+  const {
+    items,
+    active: activeTpl,
+    loadDetail,
+    create,
+    save,
+    remove,
+    loadingList,
+    loadingDetail,
+    error,
+  } = useTemplates(apiReady && active);
 
   const [picker, setPicker] = useState(NONE);
 
@@ -81,12 +87,14 @@ export function TemplatesManageCore({
   }, [activeTpl?.id]);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [newId, setNewId] = useState("custom-v1");
   const [newName, setNewName] = useState("Custom Template");
   const [newLatex, setNewLatex] = useState("");
   const [newSchemaText, setNewSchemaText] = useState(JSON.stringify(defaultSchema(), null, 2));
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const parsedNewSchema = useMemo(() => {
     try {
@@ -104,20 +112,19 @@ export function TemplatesManageCore({
       setCreateError("Schema JSON is invalid.");
       return;
     }
-    if (!newId.trim() || !newName.trim() || !newLatex.trim()) {
-      setCreateError("ID, name, and LaTeX are required.");
+    if (!newName.trim() || !newLatex.trim()) {
+      setCreateError("Name and LaTeX are required.");
       return;
     }
     setCreating(true);
     try {
-      await create({
-        id: newId.trim(),
+      const tpl = await create({
         name: newName.trim(),
         latex_source: newLatex,
         schema_json: parsedNewSchema,
       });
       setCreateOpen(false);
-      setPicker(newId.trim());
+      setPicker(tpl.id);
       onTemplatesChanged?.();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Create failed.");
@@ -134,6 +141,22 @@ export function TemplatesManageCore({
   }) {
     await save(args.id, { name: args.name, latex_source: args.latex_source, schema_json: args.schema_json });
     onTemplatesChanged?.();
+  }
+
+  async function confirmDeleteTemplate() {
+    if (!pendingDeleteId) return;
+    setDeleteError(null);
+    setIsDeleting(true);
+    try {
+      await remove(pendingDeleteId);
+      setPendingDeleteId(null);
+      setPicker(NONE);
+      onTemplatesChanged?.();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Could not delete template.");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (
@@ -202,19 +225,48 @@ export function TemplatesManageCore({
                   </Select>
 
                   <div className="flex max-h-[240px] flex-col gap-2 overflow-y-auto lg:max-h-none">
-                    {items.slice(0, 12).map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setPicker(t.id)}
-                        className="flex w-full flex-row flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/10 px-3 py-2 text-left text-sm hover:bg-muted/20"
-                      >
-                        <span className="min-w-0 truncate">{listLabel(t)}</span>
-                        <Badge variant={picker === t.id ? "default" : "secondary"}>
-                          {picker === t.id ? "active" : "—"}
-                        </Badge>
-                      </button>
-                    ))}
+                    {items.slice(0, 12).map((t) => {
+                      const isActive = picker === t.id;
+                      return (
+                        <div
+                          key={t.id}
+                          role="row"
+                          className="flex min-h-11 w-full shrink-0 items-center gap-2 rounded-lg border border-border/70 bg-muted/10 px-2 py-1.5 pl-3 text-left text-sm hover:bg-muted/20"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setPicker(t.id)}
+                            className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-center gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 rounded-sm -my-0.5 py-1"
+                          >
+                            <span className="truncate font-medium leading-tight text-foreground">{t.name}</span>
+                            <span className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
+                              {t.id.slice(0, 8)}…{t.id.slice(-4)}
+                            </span>
+                          </button>
+                          <Badge
+                            variant={isActive ? "default" : "secondary"}
+                            className="shrink-0 self-center whitespace-nowrap text-[10px] uppercase tracking-wide"
+                          >
+                            {isActive ? "Active" : "—"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                            disabled={!apiReady || loadingList}
+                            aria-label={`Delete template ${t.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteError(null);
+                              setPendingDeleteId(t.id);
+                            }}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -231,7 +283,7 @@ export function TemplatesManageCore({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create template</DialogTitle>
-            <DialogDescription>Provide an id, name, LaTeX source, and schema JSON.</DialogDescription>
+            <DialogDescription>Provide a name, LaTeX source, and schema JSON. The server assigns a template id.</DialogDescription>
           </DialogHeader>
           {createError ? (
             <Alert variant="destructive" className="border-destructive/50">
@@ -240,7 +292,6 @@ export function TemplatesManageCore({
             </Alert>
           ) : null}
           <div className="flex flex-col gap-3">
-            <Input value={newId} onChange={(e) => setNewId(e.target.value)} placeholder="custom-v1" />
             <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Custom Template" />
             <textarea
               value={newLatex}
@@ -262,6 +313,52 @@ export function TemplatesManageCore({
               {creating ? "Creating…" : "Create"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingDeleteId != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteId(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent showCloseButton className="gap-0 sm:max-w-md">
+          <DialogHeader className="space-y-2 pr-8 text-left">
+            <DialogTitle className="leading-snug">Delete this template?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the template from the database. Existing resume outputs are kept; their link to
+              this template is cleared.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError ? (
+            <p className="mt-3 text-sm leading-relaxed text-destructive">{deleteError}</p>
+          ) : null}
+          <div className="mt-4 flex flex-col-reverse gap-2 border-t border-border/70 pt-3 sm:flex-row sm:justify-end sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeleting}
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setPendingDeleteId(null);
+                setDeleteError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isDeleting}
+              className="w-full font-medium sm:w-auto"
+              onClick={() => void confirmDeleteTemplate()}
+            >
+              {isDeleting ? "Deleting…" : "Delete template"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>

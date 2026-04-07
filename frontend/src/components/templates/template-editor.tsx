@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { ResumeTemplateDetail } from "@/lib/api";
+import { resumeTemplatePreviewPdfUrl, type ResumeTemplateDetail } from "@/lib/api";
 
 function safeJsonParse(text: string): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
   try {
@@ -133,7 +133,17 @@ export function TemplateEditor({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading || saving}
+                onClick={() => {
+                  window.open(resumeTemplatePreviewPdfUrl(template.id), "_blank", "noopener,noreferrer");
+                }}
+              >
+                Download PDF preview
+              </Button>
               <Button type="button" disabled={saving || !schemaParsed.ok} onClick={() => void handleSave()}>
                 {saving ? "Saving…" : "Save template"}
               </Button>

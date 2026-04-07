@@ -12,7 +12,7 @@ def decide_next_action(*, has_resume: bool, has_job_description: bool, user_inte
     Router for worker checkpoint labels (intent classifier + session flags).
 
     Preserves ``upload_resume`` for future API callers; chat worker intents come from
-    ``app.worker.intent_classifier``.
+    ``app.openai.intent``.
     """
     if user_intent == "upload_resume":
         return NextAction(agent_name="ResumeParserAgent", reason="New resume uploaded")

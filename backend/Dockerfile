@@ -7,11 +7,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# TeX Live: broad install for pdflatex résumés/templates (fewer missing .sty / font errors).
+# lmodern: Latin Modern .sty (not always pulled by texlive metapackages alone).
+# If something is still missing, install texlive-full in this RUN (multi‑GB image).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        texlive-latex-base \
+        lmodern \
+        texlive-bibtex-extra \
+        texlive-font-utils \
+        texlive-fonts-extra \
         texlive-fonts-recommended \
+        texlive-lang-european \
+        texlive-latex-base \
         texlive-latex-extra \
+        texlive-latex-recommended \
+        texlive-pictures \
+        texlive-plain-generic \
+        texlive-publishers \
+        texlive-science \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir poetry

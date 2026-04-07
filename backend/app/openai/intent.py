@@ -4,10 +4,10 @@ import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
+from app.openai._sdk import async_openai_client
 
 
 IntentLabel = Literal[
@@ -24,12 +24,6 @@ class IntentResult:
     intent: IntentLabel
     confidence: float
     rationale: str
-
-
-def _client() -> AsyncOpenAI:
-    if not settings.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set")
-    return AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 _INTENT_SCHEMA: dict[str, Any] = {
@@ -55,7 +49,7 @@ _INTENT_SCHEMA: dict[str, Any] = {
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=1, max=8))
 async def classify_intent(*, user_text: str) -> IntentResult:
-    client = _client()
+    client = async_openai_client()
     resp = await client.responses.create(
         model=settings.openai_model,
         input=[

@@ -16,13 +16,13 @@ from app.models.job_description import JobDescription
 from app.models.resume import Resume
 from app.orchestrator.router import decide_next_action
 from app.queue_jobs import ChatMessageJob, RenderResumeJob
-from app.services.chat_reply_notify import publish_chat_reply
-from app.worker.intent_classifier import classify_intent
-from app.worker.openai_client import (
+from app.openai.client import (
     create_openai_conversation,
     delete_openai_conversation_best_effort,
     generate_reply,
 )
+from app.openai.intent import classify_intent
+from app.services.chat_reply_notify import publish_chat_reply
 from app.worker.render_resume import handle_render_resume
 
 log = structlog.get_logger()

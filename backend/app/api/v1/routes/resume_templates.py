@@ -3,6 +3,7 @@ from typing import List
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,7 @@ from app.schemas.resume_template import (
     ResumeTemplateListItem,
     ResumeTemplatePatchBody,
 )
+from app.services.resume_template_services import build_template_preview_pdf
 
 router = APIRouter(prefix="/resume-templates", tags=["resume-templates"])
 
@@ -41,6 +43,32 @@ async def create_resume_template(
     await db.commit()
     await db.refresh(tpl)
     return tpl
+
+
+@router.get("/{template_id}/preview-pdf")
+async def download_template_preview_pdf(
+    template: ResumeTemplate = Depends(get_resume_template_or_404),
+) -> Response:
+    """
+    Compile stored LaTeX as-is and return PDF (no placeholder filling; template must be valid TeX).
+    """
+    if not template.latex_source or not template.latex_source.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Template has no LaTeX source")
+    try:
+        pdf_bytes = await build_template_preview_pdf(latex_source=template.latex_source)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(e)},
+        ) from e
+    filename = f"template-preview-{template.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{template_id}", response_model=ResumeTemplateDetail)

@@ -5,18 +5,12 @@ import json
 from typing import Any
 
 import structlog
-from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
+from app.openai._sdk import async_openai_client
 
 log = structlog.get_logger()
-
-
-def _client() -> AsyncOpenAI:
-    if not settings.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set")
-    return AsyncOpenAI(api_key=settings.openai_api_key)
 
 
 def _schema_for_api(schema: dict[str, Any]) -> dict[str, Any]:
@@ -47,7 +41,7 @@ async def generate_resume_fill_json(
     resume_context: str,
     job_description_context: str | None,
 ) -> dict[str, Any]:
-    client = _client()
+    client = async_openai_client()
     api_schema = _schema_for_api(schema)
     user_parts: list[str] = [
         "Produce resume content as JSON matching the given schema exactly.",

@@ -5,13 +5,18 @@ from typing import Any
 
 import json
 import structlog
+from app.queue_jobs import ChatMessageJob, RenderResumeJob
 from sqlalchemy import text
 
 from app.config import settings
 from app.db import AsyncSessionMaker, engine
 from app.logging import configure_logging
 from app.chat_reply_notify import publish_chat_reply
-from app.openai_client import generate_reply
+from app.openai_client import (
+    create_openai_conversation,
+    delete_openai_conversation_best_effort,
+    generate_reply,
+)
 from app.intent_classifier import classify_intent
 from app.orchestrator_router import decide_next_action
 from app.queue import dequeue_job
@@ -104,16 +109,19 @@ async def insert_assistant_message(*, session_id: uuid.UUID, message: str) -> uu
     return new_id
 
 
-async def fetch_session_flags(*, session_id: uuid.UUID) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+async def fetch_session_flags(
+    *, session_id: uuid.UUID
+) -> tuple[uuid.UUID | None, uuid.UUID | None, str | None]:
     sql = text(
-        "SELECT selected_resume_id, active_jd_id FROM agent_sessions WHERE id = :id"
+        "SELECT selected_resume_id, active_jd_id, openai_conversation_id "
+        "FROM agent_sessions WHERE id = :id"
     )
     async with AsyncSessionMaker() as db:
         result = await db.execute(sql, {"id": str(session_id)})
         row = result.first()
         if row is None:
             raise RuntimeError("Session not found")
-        selected_resume_id_raw, active_jd_id_raw = row[0], row[1]
+        selected_resume_id_raw, active_jd_id_raw, openai_raw = row[0], row[1], row[2]
 
         selected_resume_id = (
             selected_resume_id_raw
@@ -125,7 +133,56 @@ async def fetch_session_flags(*, session_id: uuid.UUID) -> tuple[uuid.UUID | Non
             if isinstance(active_jd_id_raw, uuid.UUID) or active_jd_id_raw is None
             else uuid.UUID(str(active_jd_id_raw))
         )
-        return selected_resume_id, active_jd_id
+        openai_conv = None if openai_raw is None else str(openai_raw)
+        return selected_resume_id, active_jd_id, openai_conv
+
+
+async def fetch_openai_conversation_id(*, session_id: uuid.UUID) -> str | None:
+    sql = text("SELECT openai_conversation_id FROM agent_sessions WHERE id = :id")
+    async with AsyncSessionMaker() as db:
+        result = await db.execute(sql, {"id": str(session_id)})
+        row = result.first()
+        if row is None:
+            raise RuntimeError("Session not found")
+        raw = row[0]
+        return None if raw is None else str(raw)
+
+
+async def try_claim_openai_conversation_id(
+    *, session_id: uuid.UUID, conversation_id: str
+) -> bool:
+    """Persist ``conversation_id`` only if the row still has NULL. Returns True if we won the race."""
+    sql = text(
+        """
+        UPDATE agent_sessions
+        SET openai_conversation_id = :cid, updated_at = now()
+        WHERE id = :sid AND openai_conversation_id IS NULL
+        """
+    )
+    async with AsyncSessionMaker() as db:
+        result = await db.execute(
+            sql, {"cid": conversation_id, "sid": str(session_id)}
+        )
+        await db.commit()
+        return (result.rowcount or 0) > 0
+
+
+async def ensure_openai_conversation_id(
+    *, session_id: uuid.UUID, existing: str | None
+) -> str:
+    if existing:
+        return existing
+    new_id = await create_openai_conversation()
+    claimed = await try_claim_openai_conversation_id(
+        session_id=session_id, conversation_id=new_id
+    )
+    if claimed:
+        return new_id
+    resolved = await fetch_openai_conversation_id(session_id=session_id)
+    if resolved:
+        await delete_openai_conversation_best_effort(new_id)
+        return resolved
+    raise RuntimeError("openai_conversation_id missing after concurrent create")
 
 
 def _truncate(text_val: str, limit: int) -> str:
@@ -204,20 +261,16 @@ async def create_job_description_and_activate(
     return jd_id
 
 
-async def handle_chat_message_job(job: dict[str, Any]) -> None:
-    job_type = job.get("type")
-    session_id = uuid.UUID(job["session_id"])
-    input_hash = str(job.get("input_hash") or "")
+async def handle_chat_message_job(job: ChatMessageJob) -> None:
+    session_id = uuid.UUID(job.session_id)
+    input_hash = job.input_hash
 
-    log.info("job_received", type=job_type, session_id=str(session_id))
+    log.info("job_received", type=job.type, session_id=str(session_id))
 
     agent_name = "OpenAIReplyAgent"
     await checkpoint_agent_run(session_id=session_id, agent_name=agent_name, input_hash=input_hash, status="running")
 
-    message_id_raw = job.get("message_id")
-    if not message_id_raw:
-        raise RuntimeError("Job missing message_id")
-    message_id = uuid.UUID(str(message_id_raw))
+    message_id = uuid.UUID(job.message_id)
 
     # Load message from DB to make the worker independent from API payload shape.
     session_id_from_db, user_text = await fetch_user_message_text(message_id=message_id)
@@ -226,7 +279,9 @@ async def handle_chat_message_job(job: dict[str, Any]) -> None:
         session_id = session_id_from_db
 
     try:
-        selected_resume_id, active_jd_id = await fetch_session_flags(session_id=session_id)
+        selected_resume_id, active_jd_id, openai_conversation_existing = (
+            await fetch_session_flags(session_id=session_id)
+        )
         has_resume = selected_resume_id is not None
         has_job_description = active_jd_id is not None
 
@@ -260,7 +315,14 @@ async def handle_chat_message_job(job: dict[str, Any]) -> None:
                 resume_text=resume_text,
                 jd_text=jd_text,
             )
-            reply = await generate_reply(user_text=user_text, context_text=ctx)
+            conv_id = await ensure_openai_conversation_id(
+                session_id=session_id, existing=openai_conversation_existing
+            )
+            reply = await generate_reply(
+                conversation_id=conv_id,
+                user_text=user_text,
+                context_text=ctx,
+            )
             assistant_text = reply.reply_text or "Thanks — I’ve received your message."
             reply_model = reply.model
             reply_usage = reply.usage
@@ -295,15 +357,14 @@ async def handle_chat_message_job(job: dict[str, Any]) -> None:
         raise
 
 
-async def handle_job(job: dict[str, Any]) -> None:
-    job_type = job.get("type")
-    if job_type == "render_resume":
+async def handle_job(job: ChatMessageJob | RenderResumeJob) -> None:
+    if isinstance(job, RenderResumeJob):
         await handle_render_resume(job)
         return
-    if job_type == "chat_message":
+    if isinstance(job, ChatMessageJob):
         await handle_chat_message_job(job)
         return
-    raise RuntimeError(f"Unknown job type: {job_type!r}")
+    raise RuntimeError(f"Unknown job type: {type(job).__name__!r}")
 
 
 async def main() -> None:
@@ -321,7 +382,7 @@ async def main() -> None:
         try:
             await handle_job(job)
         except Exception:
-            log.exception("job_failed", job=job)
+            log.exception("job_failed", job=job.model_dump(mode="json"))
 
 
 if __name__ == "__main__":

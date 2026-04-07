@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat_message import ChatMessage
+from app.queue_jobs import ChatMessageJob
 from app.schemas.chat import ChatMessageResponse
 from app.services.queue import enqueue_job
 
@@ -42,12 +43,11 @@ async def create_user_message_and_enqueue(
 
     input_hash = hashlib.sha256(f"{msg.session_id}:{msg.message}".encode("utf-8")).hexdigest()
     await enqueue_job(
-        {
-            "type": "chat_message",
-            "session_id": str(msg.session_id),
-            "message_id": str(msg.id),
-            "input_hash": input_hash,
-        }
+        ChatMessageJob(
+            session_id=str(msg.session_id),
+            message_id=str(msg.id),
+            input_hash=input_hash,
+        )
     )
     log.info(
         "enqueued_job",

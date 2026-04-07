@@ -1,7 +1,7 @@
 from typing import List
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
@@ -37,3 +37,13 @@ async def get_resume(
 ) -> ResumeListItem:
     resume = await get_resume_or_404(resume_id, db)
     return resume
+
+
+@router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_resume(
+    resume: Resume = Depends(get_resume_or_404),
+    db: AsyncSession = Depends(get_db_session),
+) -> Response:
+    await db.delete(resume)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

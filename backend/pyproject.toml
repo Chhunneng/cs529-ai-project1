@@ -19,6 +19,7 @@ structlog = "^24.4.0"
 redis = "^5.0.0"
 tenacity = "^9.0.0"
 httpx = "^0.27.0"
+openai = "^2.29.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"

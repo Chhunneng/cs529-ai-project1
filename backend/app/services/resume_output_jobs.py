@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_session import AgentSession
+from app.queue_jobs import RenderResumeJob
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
 from app.services.queue import enqueue_job
@@ -40,12 +41,11 @@ async def create_resume_output_and_enqueue(
     await db.refresh(out)
 
     await enqueue_job(
-        {
-            "type": "render_resume",
-            "output_id": str(out.id),
-            "session_id": str(session_id),
-            "template_id": template_id,
-        }
+        RenderResumeJob(
+            output_id=str(out.id),
+            session_id=str(session.id),
+            template_id=template_id,
+        )
     )
     log.info("enqueued_job", type="render_resume", output_id=str(out.id))
     return out

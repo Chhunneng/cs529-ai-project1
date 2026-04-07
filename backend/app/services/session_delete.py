@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 from sqlalchemy import select
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.agent_session import AgentSession
 from app.models.resume_output import ResumeOutput
+from app.services.openai_conversation_cleanup import delete_openai_conversation_best_effort
 
 
 def _unlink_if_under_artifacts(path_str: str | None, artifacts_root: Path) -> None:
@@ -43,6 +43,9 @@ async def delete_session_by_id(session: AgentSession, db: AsyncSession) -> bool:
     for out in outputs:
         _unlink_if_under_artifacts(out.pdf_path, root)
         _unlink_if_under_artifacts(out.tex_path, root)
+
+    openai_conv_id = session.openai_conversation_id
+    await delete_openai_conversation_best_effort(openai_conv_id)
 
     session.active_jd_id = None
     session.selected_resume_id = None

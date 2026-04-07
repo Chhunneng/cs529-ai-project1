@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,3 +18,6 @@ class AgentSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("job_descriptions.id", ondelete="SET NULL"), nullable=True
     )
     state_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    openai_conversation_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )

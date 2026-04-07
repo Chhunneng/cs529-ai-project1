@@ -17,4 +17,3 @@ COPY worker/app /app/app
 COPY backend/templates /app/templates
 
 CMD ["python", "-m", "app.worker"]
-

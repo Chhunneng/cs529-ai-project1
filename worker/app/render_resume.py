@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from app.queue_jobs import RenderResumeJob
 from sqlalchemy import text
 
 from app.config import settings
@@ -122,8 +123,8 @@ async def _fetch_jd_text(session_id: uuid.UUID, jd_id: uuid.UUID) -> str | None:
         return str(row[0])
 
 
-async def handle_render_resume(job: dict[str, Any]) -> None:
-    output_id = uuid.UUID(str(job["output_id"]))
+async def handle_render_resume(job: RenderResumeJob) -> None:
+    output_id = uuid.UUID(job.output_id)
     log.info("render_resume_start", output_id=str(output_id))
 
     await _set_output_running(output_id)

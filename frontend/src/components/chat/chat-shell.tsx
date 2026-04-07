@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { MessageSquareText } from "lucide-react";
 
 import { ChatComposer } from "@/components/chat/chat-composer";
@@ -10,7 +11,7 @@ import { ChatThread } from "@/components/chat/chat-thread";
 import { useChat } from "@/components/chat/use-chat";
 import { useChatWorkspace } from "@/components/chat/use-chat-workspace";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Empty,
@@ -76,6 +77,12 @@ export function ChatShell() {
                 Ask for resume edits, tailoring, or PDF output — messages are saved with this session.
               </p>
             </div>
+            <Link
+              href="/dashboard"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "rounded-xl" })}
+            >
+              Dashboard
+            </Link>
           </div>
           {newChatError ? (
             <Alert variant="destructive" className="border-destructive/50">
@@ -88,9 +95,13 @@ export function ChatShell() {
               <AlertTitle>Backend unreachable</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
                 <span>Check NEXT_PUBLIC_API_BASE_URL and that the API is running.</span>
-                <Button className="w-fit" size="sm" variant="outline" onClick={() => retryConnection()}>
+                <button
+                  type="button"
+                  className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
+                  onClick={() => retryConnection()}
+                >
                   Retry
-                </Button>
+                </button>
               </AlertDescription>
             </Alert>
           ) : null}

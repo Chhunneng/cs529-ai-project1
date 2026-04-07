@@ -20,10 +20,33 @@ def _client() -> AsyncOpenAI:
 
 
 def _schema_for_api(schema: dict[str, Any]) -> dict[str, Any]:
-    """OpenAI structured outputs reject some meta keys."""
-    s = copy.deepcopy(schema)
-    s.pop("$schema", None)
-    return s
+    """
+    Normalize JSON Schema for OpenAI structured outputs.
+
+    OpenAI is stricter than typical JSON Schema validators:
+    - For any object with `properties`, `required` must exist and include *every* key in `properties`.
+    - Some meta keys (like `$schema`) are rejected.
+    """
+
+    def normalize(node: Any) -> Any:
+        if isinstance(node, dict):
+            out = {}
+            for k, v in node.items():
+                if k in {"$schema"}:
+                    continue
+                out[k] = normalize(v)
+
+            # If an object defines properties, OpenAI expects required to include all of them.
+            if isinstance(out.get("properties"), dict):
+                prop_keys = list(out["properties"].keys())
+                out["required"] = prop_keys
+
+            return out
+        if isinstance(node, list):
+            return [normalize(x) for x in node]
+        return node
+
+    return normalize(copy.deepcopy(schema))
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=1, max=8))
@@ -34,7 +57,7 @@ async def generate_resume_fill_json(
     job_description_context: str | None,
 ) -> dict[str, Any]:
     """
-    Chat Completions + Structured Outputs (json_schema) per OpenAI docs.
+    Responses API + Structured Outputs (json_schema) per OpenAI docs.
     """
     client = _client()
     api_schema = _schema_for_api(schema)
@@ -51,30 +74,30 @@ async def generate_resume_fill_json(
     )
     user_message = "\n\n".join(user_parts)
 
-    completion = await client.chat.completions.create(
+    resp = await client.responses.create(
         model=settings.openai_model,
-        messages=[
+        input=[
             {
                 "role": "system",
                 "content": "You fill resume templates with structured JSON only.",
             },
             {"role": "user", "content": user_message},
         ],
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
+        text={
+            "format": {
+                "type": "json_schema",
                 "name": "resume_fill",
                 "strict": True,
                 "schema": api_schema,
-            },
+            }
         },
     )
-    choice = completion.choices[0].message.content
-    if not choice:
+    out = getattr(resp, "output_text", None) or ""
+    if not out.strip():
         raise RuntimeError("OpenAI returned empty completion")
 
     try:
-        return json.loads(choice)
+        return json.loads(out)
     except json.JSONDecodeError as e:
-        log.error("openai_json_parse_failed", content=choice[:500])
+        log.error("openai_json_parse_failed", content=out[:500])
         raise RuntimeError("OpenAI returned non-JSON content") from e

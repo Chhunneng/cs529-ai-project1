@@ -14,7 +14,11 @@ class ResumeTemplate(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    latex_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     schema_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )

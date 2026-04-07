@@ -18,4 +18,3 @@ class AgentSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("job_descriptions.id", ondelete="SET NULL"), nullable=True
     )
     state_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-

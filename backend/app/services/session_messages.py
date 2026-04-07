@@ -1,4 +1,5 @@
 import hashlib
+from typing import List
 import uuid
 from datetime import datetime
 
@@ -19,15 +20,13 @@ async def list_messages_for_session(
     session_id: uuid.UUID,
     limit: int,
     before: datetime | None,
-) -> list[ChatMessage]:
+) -> List[ChatMessage]:
     q = select(ChatMessage).where(ChatMessage.session_id == session_id)
     if before is not None:
         q = q.where(ChatMessage.created_at < before)
-    q = q.order_by(ChatMessage.created_at.desc()).limit(limit)
+    q = q.order_by(ChatMessage.created_at.asc()).limit(limit)
     result = await db.execute(q)
-    rows = list(result.scalars().all())
-    rows.reverse()
-    return rows
+    return list(result.scalars().all())
 
 
 async def create_user_message_and_enqueue(

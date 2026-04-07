@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  activateJobDescription,
+  createJobDescription,
   createResume,
   createResumeOutput,
   getResumeOutput,
   getSession,
+  listJobDescriptions,
   listResumes,
   listResumeTemplates,
   patchSession,
   resumeOutputPdfUrl,
+  type JobDescriptionResponse,
   type ResumeListItem,
   type ResumeOutputResponse,
   type ResumeTemplateListItem,
@@ -40,6 +44,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const NONE = "__none__";
+const JD_NONE = "__jd_none__";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -58,6 +63,8 @@ export function ContextPanel({
   const [templates, setTemplates] = useState<ResumeTemplateListItem[]>([]);
   const [templateId, setTemplateId] = useState<string>("ats-v1");
   const [resumeValue, setResumeValue] = useState<string>(NONE);
+  const [jds, setJds] = useState<JobDescriptionResponse[]>([]);
+  const [jdValue, setJdValue] = useState<string>(JD_NONE);
   const [listsLoading, setListsLoading] = useState(true);
   const [lastOutput, setLastOutput] = useState<ResumeOutputResponse | null>(null);
   const [outputBusy, setOutputBusy] = useState(false);
@@ -65,6 +72,8 @@ export function ContextPanel({
 
   const [addOpen, setAddOpen] = useState(false);
   const [newFilename, setNewFilename] = useState("resume.pdf");
+  const [jdOpen, setJdOpen] = useState(false);
+  const [jdDraft, setJdDraft] = useState("");
 
   const loadLists = useCallback(async () => {
     if (!apiReady) return;
@@ -85,6 +94,17 @@ export function ContextPanel({
     }
   }, [apiReady]);
 
+  const loadJds = useCallback(async () => {
+    if (!apiReady || !sessionId) return;
+    try {
+      const rows = await listJobDescriptions({ session_id: sessionId, limit: 50 });
+      setJds(rows);
+    } catch {
+      // keep UI usable even if JD endpoint isn't reachable
+      setJds([]);
+    }
+  }, [apiReady, sessionId]);
+
   useEffect(() => {
     void loadLists();
   }, [loadLists]);
@@ -97,6 +117,8 @@ export function ContextPanel({
     if (!sessionId || !apiReady) {
       setSession(null);
       setResumeValue(NONE);
+      setJds([]);
+      setJdValue(JD_NONE);
       return;
     }
     let cancelled = false;
@@ -106,6 +128,7 @@ export function ContextPanel({
         if (cancelled) return;
         setSession(s);
         setResumeValue(s.selected_resume_id ?? NONE);
+        setJdValue(s.active_jd_id ?? JD_NONE);
       })
       .catch(() => {
         if (cancelled) return;
@@ -114,10 +137,11 @@ export function ContextPanel({
       .finally(() => {
         if (!cancelled) setSessionLoading(false);
       });
+    void loadJds();
     return () => {
       cancelled = true;
     };
-  }, [sessionId, apiReady]);
+  }, [sessionId, apiReady, loadJds]);
 
   async function onResumeChange(value: string) {
     if (!sessionId || !apiReady) return;
@@ -128,6 +152,18 @@ export function ContextPanel({
       setSession(s);
     } catch {
       setOutputNotice("Failed to update session resume.");
+    }
+  }
+
+  async function onJdChange(value: string) {
+    if (!sessionId || !apiReady) return;
+    setJdValue(value);
+    const id = value === JD_NONE ? null : value;
+    try {
+      const s = await patchSession(sessionId, { active_jd_id: id });
+      setSession(s);
+    } catch {
+      setOutputNotice("Failed to update active job description.");
     }
   }
 
@@ -143,6 +179,35 @@ export function ContextPanel({
     }
   }
 
+  async function handlePasteJd() {
+    if (!apiReady || !sessionId) return;
+    const text = jdDraft.trim();
+    if (!text) return;
+    try {
+      const jd = await createJobDescription({ session_id: sessionId, raw_text: text, set_active: true });
+      setJdOpen(false);
+      setJdDraft("");
+      setJdValue(jd.id);
+      const s = await getSession(sessionId);
+      setSession(s);
+      await loadJds();
+    } catch (e) {
+      setOutputNotice(e instanceof Error ? e.message : "Could not save job description.");
+    }
+  }
+
+  async function handleActivateJd(jdId: string) {
+    if (!apiReady || !sessionId) return;
+    try {
+      await activateJobDescription({ session_id: sessionId, job_description_id: jdId });
+      setJdValue(jdId);
+      const s = await getSession(sessionId);
+      setSession(s);
+    } catch (e) {
+      setOutputNotice(e instanceof Error ? e.message : "Could not activate job description.");
+    }
+  }
+
   async function handleGeneratePdf() {
     if (!sessionId || !apiReady || !templateId) return;
     setOutputBusy(true);
@@ -152,7 +217,7 @@ export function ContextPanel({
       const initial = await createResumeOutput(sessionId, {
         template_id: templateId,
         source_resume_id: resumeValue === NONE ? null : resumeValue,
-        job_description_id: null,
+        job_description_id: session?.active_jd_id ?? null,
       });
       let cur = initial;
       const deadline = Date.now() + 180_000;
@@ -332,10 +397,53 @@ export function ContextPanel({
           <Alert>
             <AlertTitle>Job descriptions</AlertTitle>
             <AlertDescription>
-              There is no REST API yet to create or list job descriptions. When it exists, you can
-              attach a JD id to PDF generation and session state.
+              Paste a job description, select an active one for this session, and it will be used
+              for tailoring during PDF generation.
             </AlertDescription>
           </Alert>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-row items-center justify-between gap-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Active JD
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!apiReady}
+                type="button"
+                onClick={() => setJdOpen(true)}
+              >
+                Paste JD
+              </Button>
+            </div>
+
+            <Select value={jdValue} onValueChange={(v) => void onJdChange(v ?? JD_NONE)}>
+              <SelectTrigger className="w-full" size="sm">
+                <SelectValue placeholder="Select a job description" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={JD_NONE}>None</SelectItem>
+                {jds.map((jd) => (
+                  <SelectItem key={jd.id} value={jd.id}>
+                    {jd.id.slice(0, 8)}… ({new Date(jd.created_at).toLocaleDateString()})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {jdValue !== JD_NONE ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!apiReady || !sessionId}
+                type="button"
+                onClick={() => void handleActivateJd(jdValue)}
+              >
+                Set active
+              </Button>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -359,6 +467,33 @@ export function ContextPanel({
               Cancel
             </Button>
             <Button onClick={() => void handleAddResume()}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={jdOpen} onOpenChange={setJdOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Paste job description</DialogTitle>
+            <DialogDescription>
+              Paste the full job description text. It will be saved to this session and used for tailoring.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={jdDraft}
+              onChange={(e) => setJdDraft(e.target.value)}
+              placeholder="Paste the job description here…"
+              className="min-h-[180px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
+            />
+          </div>
+          <DialogFooter className="flex flex-row gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setJdOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={!jdDraft.trim()} onClick={() => void handlePasteJd()}>
+              Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -28,19 +28,15 @@ def _unlink_if_under_artifacts(path_str: str | None, artifacts_root: Path) -> No
             pass
 
 
-async def delete_session_by_id(db: AsyncSession, session_id: uuid.UUID) -> bool:
+async def delete_session_by_id(session: AgentSession, db: AsyncSession) -> bool:
     """
     Remove session row (CASCADE: messages, runs, JDs, resume_outputs).
     Clears FK pointers that would block CASCADE on job_descriptions, then deletes
     PDF/TeX files for outputs under ``artifacts_dir``.
     """
-    result = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    session = result.scalar_one_or_none()
-    if session is None:
-        return False
 
     out_result = await db.execute(
-        select(ResumeOutput).where(ResumeOutput.session_id == session_id)
+        select(ResumeOutput).where(ResumeOutput.session_id == session.id)
     )
     outputs = out_result.scalars().all()
     root = Path(settings.artifacts_dir).resolve()

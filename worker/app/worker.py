@@ -12,6 +12,8 @@ from app.db import AsyncSessionMaker, engine
 from app.logging import configure_logging
 from app.chat_reply_notify import publish_chat_reply
 from app.openai_client import generate_reply
+from app.intent_classifier import classify_intent
+from app.orchestrator_router import decide_next_action
 from app.queue import dequeue_job
 from app.render_resume import handle_render_resume
 
@@ -102,6 +104,106 @@ async def insert_assistant_message(*, session_id: uuid.UUID, message: str) -> uu
     return new_id
 
 
+async def fetch_session_flags(*, session_id: uuid.UUID) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+    sql = text(
+        "SELECT selected_resume_id, active_jd_id FROM agent_sessions WHERE id = :id"
+    )
+    async with AsyncSessionMaker() as db:
+        result = await db.execute(sql, {"id": str(session_id)})
+        row = result.first()
+        if row is None:
+            raise RuntimeError("Session not found")
+        selected_resume_id_raw, active_jd_id_raw = row[0], row[1]
+
+        selected_resume_id = (
+            selected_resume_id_raw
+            if isinstance(selected_resume_id_raw, uuid.UUID) or selected_resume_id_raw is None
+            else uuid.UUID(str(selected_resume_id_raw))
+        )
+        active_jd_id = (
+            active_jd_id_raw
+            if isinstance(active_jd_id_raw, uuid.UUID) or active_jd_id_raw is None
+            else uuid.UUID(str(active_jd_id_raw))
+        )
+        return selected_resume_id, active_jd_id
+
+
+def _truncate(text_val: str, limit: int) -> str:
+    if len(text_val) <= limit:
+        return text_val
+    return text_val[:limit].rstrip() + "…"
+
+
+async def fetch_resume_context_text(*, resume_id: uuid.UUID) -> str | None:
+    sql = text("SELECT parsed_json FROM resumes WHERE id = :id")
+    async with AsyncSessionMaker() as db:
+        result = await db.execute(sql, {"id": str(resume_id)})
+        row = result.first()
+        if row is None or row[0] is None:
+            return None
+        try:
+            return _truncate(json.dumps(row[0], ensure_ascii=False), 6000)
+        except Exception:
+            return None
+
+
+async def fetch_job_description_text(*, session_id: uuid.UUID, jd_id: uuid.UUID) -> str | None:
+    sql = text(
+        """
+        SELECT raw_text FROM job_descriptions
+        WHERE id = :id AND session_id = :session_id
+        """
+    )
+    async with AsyncSessionMaker() as db:
+        result = await db.execute(sql, {"id": str(jd_id), "session_id": str(session_id)})
+        row = result.first()
+        if row is None:
+            return None
+        return _truncate(str(row[0]), 6000)
+
+
+def build_session_context_block(
+    *,
+    selected_resume_id: uuid.UUID | None,
+    active_jd_id: uuid.UUID | None,
+    resume_text: str | None,
+    jd_text: str | None,
+) -> str:
+    parts: list[str] = []
+    parts.append(f"selected_resume_id: {selected_resume_id or 'null'}")
+    parts.append(f"active_jd_id: {active_jd_id or 'null'}")
+    if resume_text:
+        parts.append("--- Selected resume (structured JSON, may be partial) ---\n" + resume_text)
+    if jd_text:
+        parts.append("--- Active job description ---\n" + jd_text)
+    return "\n".join(parts)
+
+
+async def create_job_description_and_activate(
+    *, session_id: uuid.UUID, raw_text: str
+) -> uuid.UUID:
+    jd_id = uuid.uuid4()
+    insert_sql = text(
+        """
+        INSERT INTO job_descriptions (id, session_id, raw_text, extracted_json, created_at, updated_at)
+        VALUES (:id, :session_id, :raw_text, NULL, now(), now())
+        """
+    )
+    activate_sql = text(
+        "UPDATE agent_sessions SET active_jd_id = :jd_id, updated_at = now() WHERE id = :session_id"
+    )
+    async with AsyncSessionMaker() as db:
+        await db.execute(
+            insert_sql,
+            {"id": str(jd_id), "session_id": str(session_id), "raw_text": raw_text},
+        )
+        await db.execute(
+            activate_sql, {"jd_id": str(jd_id), "session_id": str(session_id)}
+        )
+        await db.commit()
+    return jd_id
+
+
 async def handle_chat_message_job(job: dict[str, Any]) -> None:
     job_type = job.get("type")
     session_id = uuid.UUID(job["session_id"])
@@ -124,8 +226,44 @@ async def handle_chat_message_job(job: dict[str, Any]) -> None:
         session_id = session_id_from_db
 
     try:
-        reply = await generate_reply(user_text=user_text)
-        assistant_text = reply.reply_text or "Thanks — I’ve received your message."
+        selected_resume_id, active_jd_id = await fetch_session_flags(session_id=session_id)
+        has_resume = selected_resume_id is not None
+        has_job_description = active_jd_id is not None
+
+        intent = await classify_intent(user_text=user_text)
+        action = decide_next_action(
+            has_resume=has_resume, has_job_description=has_job_description, user_intent=intent.intent
+        )
+
+        agent_name = action.agent_name
+
+        if intent.intent == "job_description":
+            jd_id = await create_job_description_and_activate(session_id=session_id, raw_text=user_text)
+            assistant_text = (
+                "Saved that job description and set it as active for this session. "
+                f"JD id: {jd_id}"
+            )
+            reply_model = "internal"
+            reply_usage = None
+        else:
+            resume_text = (
+                await fetch_resume_context_text(resume_id=selected_resume_id) if selected_resume_id else None
+            )
+            jd_text = (
+                await fetch_job_description_text(session_id=session_id, jd_id=active_jd_id)
+                if active_jd_id
+                else None
+            )
+            ctx = build_session_context_block(
+                selected_resume_id=selected_resume_id,
+                active_jd_id=active_jd_id,
+                resume_text=resume_text,
+                jd_text=jd_text,
+            )
+            reply = await generate_reply(user_text=user_text, context_text=ctx)
+            assistant_text = reply.reply_text or "Thanks — I’ve received your message."
+            reply_model = reply.model
+            reply_usage = reply.usage
 
         assistant_id = await insert_assistant_message(session_id=session_id, message=assistant_text)
         await publish_chat_reply(
@@ -138,7 +276,13 @@ async def handle_chat_message_job(job: dict[str, Any]) -> None:
             agent_name=agent_name,
             input_hash=input_hash,
             status="succeeded",
-            output_json={"model": reply.model, "reply_text": assistant_text, "usage": reply.usage},
+            output_json={
+                "model": reply_model,
+                "reply_text": assistant_text,
+                "usage": reply_usage,
+                "intent": {"label": intent.intent, "confidence": intent.confidence, "rationale": intent.rationale},
+                "route": {"agent_name": action.agent_name, "reason": action.reason},
+            },
         )
     except Exception as e:
         await checkpoint_agent_run(

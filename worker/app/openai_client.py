@@ -23,20 +23,26 @@ def _client() -> AsyncOpenAI:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=1, max=8))
-async def generate_reply(*, user_text: str) -> OpenAIReply:
+async def generate_reply(*, user_text: str, context_text: str | None = None) -> OpenAIReply:
     """
     Minimal OpenAI call (Phase 1): take a user message and return a short assistant reply.
     """
     client = _client()
 
+    ctx = (context_text or "").strip()
+    ctx_block = f"\n\n--- Session context ---\n{ctx}" if ctx else ""
     resp = await client.responses.create(
         model=settings.openai_model,
         input=[
             {
                 "role": "system",
-                "content": "You are a helpful resume assistant. Keep replies short in Phase 1.",
+                "content": (
+                    "You are a helpful resume assistant.\n"
+                    "Use any provided session context (selected resume, active job description) when relevant.\n"
+                    "Keep replies short in Phase 1."
+                ),
             },
-            {"role": "user", "content": user_text},
+            {"role": "user", "content": user_text + ctx_block},
         ],
     )
 

@@ -15,26 +15,24 @@ log = structlog.get_logger()
 async def create_resume_output_and_enqueue(
     db: AsyncSession,
     *,
-    session_id: uuid.UUID,
+    session: AgentSession,
     template_id: str,
     source_resume_id: uuid.UUID | None,
     job_description_id: uuid.UUID | None,
 ) -> ResumeOutput:
-    sess = await db.execute(select(AgentSession).where(AgentSession.id == session_id))
-    if sess.scalar_one_or_none() is None:
-        raise ValueError("Session not found")
-
-    tpl = await db.execute(select(ResumeTemplate).where(ResumeTemplate.id == template_id))
-    if tpl.scalar_one_or_none() is None:
+    resume_template = await db.execute(select(ResumeTemplate).where(ResumeTemplate.id == template_id))
+    if resume_template.scalar_one_or_none() is None:
         raise ValueError("Template not found")
 
+    resolved_jd_id = job_description_id if job_description_id is not None else session.active_jd_id
+
     out = ResumeOutput(
-        session_id=session_id,
+        session_id=session.id,
         template_id=template_id,
         status="queued",
         input_json={
             "source_resume_id": str(source_resume_id) if source_resume_id else None,
-            "job_description_id": str(job_description_id) if job_description_id else None,
+            "job_description_id": str(resolved_jd_id) if resolved_jd_id else None,
         },
     )
     db.add(out)

@@ -80,7 +80,7 @@ async def _fetch_render_context(output_id: uuid.UUID) -> dict[str, Any]:
     sql = text(
         """
         SELECT ro.id, ro.session_id, ro.template_id, ro.input_json,
-               rt.storage_path, rt.schema_json
+               rt.storage_path, rt.schema_json, rt.latex_source
         FROM resume_outputs ro
         JOIN resume_templates rt ON rt.id = ro.template_id
         WHERE ro.id = :id
@@ -132,6 +132,7 @@ async def handle_render_resume(job: dict[str, Any]) -> None:
         ctx = await _fetch_render_context(output_id)
         template_id = str(ctx["template_id"])
         storage_path = str(ctx["storage_path"])
+        latex_source = ctx.get("latex_source")
         schema_json: dict[str, Any] = ctx["schema_json"]
         session_id = ctx["session_id"]
         if isinstance(session_id, uuid.UUID):
@@ -169,8 +170,12 @@ async def handle_render_resume(job: dict[str, Any]) -> None:
 
         data = ResumeFillAtsV1.model_validate(fill_obj)
 
-        base = Path(settings.templates_base_dir)
-        template_tex = load_template_tex(base, storage_path)
+        template_tex = None
+        if isinstance(latex_source, str) and latex_source.strip():
+            template_tex = latex_source
+        else:
+            base = Path(settings.templates_base_dir)
+            template_tex = load_template_tex(base, storage_path)
         tex_body = render_ats_v1(template_tex=template_tex, data=data)
 
         out_dir = Path(settings.artifacts_dir) / str(output_id)

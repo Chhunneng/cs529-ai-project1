@@ -6,42 +6,40 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from app.queue_jobs import RenderResumeJob
-from sqlalchemy import text
+from sqlalchemy import select, update
 
-from app.config import settings
-from app.db import AsyncSessionMaker
-from app.latex_client import compile_tex_to_pdf
-from app.openai_resume_fill import generate_resume_fill_json
-from app.resume_fill_models import ResumeFillAtsV1
-from app.tex_renderer import load_template_tex, render_ats_v1
+from app.core.config import settings
+from app.db.session import AsyncSessionMaker
+from app.models.job_description import JobDescription
+from app.models.resume import Resume
+from app.models.resume_output import ResumeOutput
+from app.models.resume_template import ResumeTemplate
+from app.queue_jobs import RenderResumeJob
+from app.worker.latex_client import compile_tex_to_pdf
+from app.worker.openai_resume_fill import generate_resume_fill_json
+from app.worker.resume_fill_models import ResumeFillAtsV1
+from app.worker.tex_renderer import load_template_tex, render_ats_v1
 
 log = structlog.get_logger()
 
 
 async def _set_output_running(output_id: uuid.UUID) -> None:
-    sql = text(
-        """
-        UPDATE resume_outputs
-        SET status = 'running', error_text = NULL, updated_at = now()
-        WHERE id = :id
-        """
-    )
     async with AsyncSessionMaker() as db:
-        await db.execute(sql, {"id": str(output_id)})
+        await db.execute(
+            update(ResumeOutput)
+            .where(ResumeOutput.id == output_id)
+            .values(status="running", error_text=None)
+        )
         await db.commit()
 
 
 async def _set_output_failed(output_id: uuid.UUID, error_text: str) -> None:
-    sql = text(
-        """
-        UPDATE resume_outputs
-        SET status = 'failed', error_text = :error_text, updated_at = now()
-        WHERE id = :id
-        """
-    )
     async with AsyncSessionMaker() as db:
-        await db.execute(sql, {"id": str(output_id), "error_text": error_text[:8000]})
+        await db.execute(
+            update(ResumeOutput)
+            .where(ResumeOutput.id == output_id)
+            .values(status="failed", error_text=error_text[:8000])
+        )
         await db.commit()
 
 
@@ -52,75 +50,61 @@ async def _set_output_succeeded(
     tex_path: str,
     pdf_path: str,
 ) -> None:
-    sql = text(
-        """
-        UPDATE resume_outputs
-        SET status = 'succeeded',
-            input_json = CAST(:input_json AS jsonb),
-            tex_path = :tex_path,
-            pdf_path = :pdf_path,
-            error_text = NULL,
-            updated_at = now()
-        WHERE id = :id
-        """
-    )
     async with AsyncSessionMaker() as db:
         await db.execute(
-            sql,
-            {
-                "id": str(output_id),
-                "input_json": json.dumps(input_json),
-                "tex_path": tex_path,
-                "pdf_path": pdf_path,
-            },
+            update(ResumeOutput)
+            .where(ResumeOutput.id == output_id)
+            .values(
+                status="succeeded",
+                input_json=input_json,
+                tex_path=tex_path,
+                pdf_path=pdf_path,
+                error_text=None,
+            )
         )
         await db.commit()
 
 
 async def _fetch_render_context(output_id: uuid.UUID) -> dict[str, Any]:
-    sql = text(
-        """
-        SELECT ro.id, ro.session_id, ro.template_id, ro.input_json,
-               rt.storage_path, rt.schema_json, rt.latex_source
-        FROM resume_outputs ro
-        JOIN resume_templates rt ON rt.id = ro.template_id
-        WHERE ro.id = :id
-        """
-    )
     async with AsyncSessionMaker() as db:
-        result = await db.execute(sql, {"id": str(output_id)})
-        row = result.first()
-        if row is None:
+        row = await db.execute(
+            select(ResumeOutput, ResumeTemplate)
+            .join(ResumeTemplate, ResumeOutput.template_id == ResumeTemplate.id)
+            .where(ResumeOutput.id == output_id)
+        )
+        first = row.first()
+        if first is None:
             raise RuntimeError("resume_output not found")
-        cols = row._mapping
-        return dict(cols)
+        ro, rt = first[0], first[1]
+        return {
+            "id": ro.id,
+            "session_id": ro.session_id,
+            "template_id": ro.template_id,
+            "input_json": ro.input_json,
+            "storage_path": rt.storage_path,
+            "schema_json": rt.schema_json,
+            "latex_source": rt.latex_source,
+        }
 
 
 async def _fetch_resume_text(resume_id: uuid.UUID) -> str | None:
-    sql = text("SELECT parsed_json FROM resumes WHERE id = :id")
     async with AsyncSessionMaker() as db:
-        result = await db.execute(sql, {"id": str(resume_id)})
-        row = result.first()
-        if row is None or row[0] is None:
+        r = await db.get(Resume, resume_id)
+        if r is None or r.parsed_json is None:
             return None
-        return json.dumps(row[0], ensure_ascii=False)
+        return json.dumps(r.parsed_json, ensure_ascii=False)
 
 
 async def _fetch_jd_text(session_id: uuid.UUID, jd_id: uuid.UUID) -> str | None:
-    sql = text(
-        """
-        SELECT raw_text FROM job_descriptions
-        WHERE id = :id AND session_id = :session_id
-        """
-    )
     async with AsyncSessionMaker() as db:
-        result = await db.execute(
-            sql, {"id": str(jd_id), "session_id": str(session_id)}
+        jd = await db.scalar(
+            select(JobDescription).where(
+                JobDescription.id == jd_id, JobDescription.session_id == session_id
+            )
         )
-        row = result.first()
-        if row is None:
+        if jd is None:
             return None
-        return str(row[0])
+        return str(jd.raw_text)
 
 
 async def handle_render_resume(job: RenderResumeJob) -> None:

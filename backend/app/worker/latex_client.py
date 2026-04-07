@@ -5,7 +5,7 @@ import base64
 import httpx
 import structlog
 
-from app.config import settings
+from app.core.config import settings
 
 log = structlog.get_logger()
 

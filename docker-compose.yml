@@ -56,8 +56,8 @@ services:
 
   worker:
     build:
-      context: .
-      dockerfile: worker/Dockerfile
+      context: ./backend
+    command: ["python", "-m", "app.worker.runner"]
     env_file:
       - ./.env
     environment:

@@ -17,7 +17,7 @@ async def create_resume_output_and_enqueue(
     db: AsyncSession,
     *,
     session: AgentSession,
-    template_id: str,
+    template_id: uuid.UUID,
     source_resume_id: uuid.UUID | None,
     job_description_id: uuid.UUID | None,
 ) -> ResumeOutput:
@@ -44,7 +44,7 @@ async def create_resume_output_and_enqueue(
         RenderResumeJob(
             output_id=str(out.id),
             session_id=str(session.id),
-            template_id=template_id,
+            template_id=str(template_id),
         )
     )
     log.info("enqueued_job", type="render_resume", output_id=str(out.id))

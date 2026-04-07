@@ -20,11 +20,9 @@ class Settings(BaseSettings):
 
     # Worker: HTTP LaTeX compile service (compose points at backend internal route)
     latex_service_url: str = "http://backend:8000/api/v1/internal"
-    templates_base_dir: str = "/app/templates"
 
     # Shared with worker via volume; PDFs served from absolute paths stored in DB
     artifacts_dir: str = "/data/artifacts"
 
 
 settings = Settings()  # type: ignore[call-arg]
-

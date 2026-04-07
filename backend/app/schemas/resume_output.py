@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ResumeOutputCreateBody(BaseModel):
-    template_id: str = Field(..., min_length=1)
+    template_id: uuid.UUID
     source_resume_id: uuid.UUID | None = None
     job_description_id: uuid.UUID | None = None
 
@@ -13,7 +13,7 @@ class ResumeOutputCreateBody(BaseModel):
 class ResumeOutputResponse(BaseModel):
     id: uuid.UUID
     session_id: uuid.UUID
-    template_id: str
+    template_id: uuid.UUID | None
     status: str
     input_json: dict | None
     tex_path: str | None

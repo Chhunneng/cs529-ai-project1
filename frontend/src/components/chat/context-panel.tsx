@@ -63,7 +63,7 @@ export function ContextPanel({
   const [sessionLoading, setSessionLoading] = useState(false);
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
   const [templates, setTemplates] = useState<ResumeTemplateListItem[]>([]);
-  const [templateId, setTemplateId] = useState<string>("ats-v1");
+  const [templateId, setTemplateId] = useState<string>("");
   const [resumeValue, setResumeValue] = useState<string>(NONE);
   const [jds, setJds] = useState<JobDescriptionResponse[]>([]);
   const [jdValue, setJdValue] = useState<string>(JD_NONE);

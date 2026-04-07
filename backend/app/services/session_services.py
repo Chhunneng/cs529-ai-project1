@@ -1,8 +1,9 @@
-"""Delete an agent session and dependent rows; remove artifact files when safe."""
+"""Agent session persistence: create, list, patch, and delete (including artifact cleanup)."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,39 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.agent_session import AgentSession
 from app.models.resume_output import ResumeOutput
-from app.services.openai_conversation_cleanup import delete_openai_conversation_best_effort
+from app.schemas.rest import SessionPatchRequest
+from app.openai.client import delete_openai_conversation_best_effort
+
+
+async def create_agent_session(db: AsyncSession) -> AgentSession:
+    session = AgentSession(state_json={})
+    db.add(session)
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
+async def list_agent_sessions(db: AsyncSession, *, limit: int) -> Sequence[AgentSession]:
+    result = await db.execute(
+        select(AgentSession).order_by(AgentSession.updated_at.desc()).limit(limit)
+    )
+    return result.scalars().all()
+
+
+async def patch_agent_session(
+    session: AgentSession,
+    body: SessionPatchRequest,
+    db: AsyncSession,
+) -> AgentSession:
+    if body.selected_resume_id is not None:
+        session.selected_resume_id = body.selected_resume_id
+    if body.active_jd_id is not None:
+        session.active_jd_id = body.active_jd_id
+    if body.state_json is not None:
+        session.state_json = body.state_json
+    await db.commit()
+    await db.refresh(session)
+    return session
 
 
 def _unlink_if_under_artifacts(path_str: str | None, artifacts_root: Path) -> None:

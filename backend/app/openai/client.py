@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
-from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
+from app.openai._sdk import async_openai_client
 
 log = structlog.get_logger()
 
@@ -25,25 +25,19 @@ class OpenAIReply:
     usage: dict[str, Any] | None
 
 
-def _client() -> AsyncOpenAI:
-    if not settings.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set")
-    return AsyncOpenAI(api_key=settings.openai_api_key)
-
-
 async def create_openai_conversation() -> str:
-    client = _client()
+    client = async_openai_client()
     conv = await client.conversations.create(
         items=[{"role": "system", "content": RESUME_ASSISTANT_SYSTEM_MESSAGE}],
     )
     return conv.id
 
 
-async def delete_openai_conversation_best_effort(conversation_id: str) -> None:
+async def delete_openai_conversation_best_effort(conversation_id: str | None) -> None:
     if not conversation_id or not settings.openai_api_key:
         return
     try:
-        client = _client()
+        client = async_openai_client()
         await client.conversations.delete(conversation_id)
     except Exception as e:
         log.warning(
@@ -60,7 +54,7 @@ async def generate_reply(
     user_text: str,
     context_text: str | None = None,
 ) -> OpenAIReply:
-    client = _client()
+    client = async_openai_client()
 
     ctx = (context_text or "").strip()
     ctx_block = f"\n\n--- Session context ---\n{ctx}" if ctx else ""

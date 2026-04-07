@@ -7,7 +7,7 @@ import structlog
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.config import settings
+from app.core.config import settings
 
 log = structlog.get_logger()
 
@@ -32,7 +32,6 @@ def _client() -> AsyncOpenAI:
 
 
 async def create_openai_conversation() -> str:
-    """Create a server-side OpenAI conversation with the shared system message."""
     client = _client()
     conv = await client.conversations.create(
         items=[{"role": "system", "content": RESUME_ASSISTANT_SYSTEM_MESSAGE}],
@@ -41,7 +40,6 @@ async def create_openai_conversation() -> str:
 
 
 async def delete_openai_conversation_best_effort(conversation_id: str) -> None:
-    """Remove a remote conversation; ignores failures (e.g. already deleted)."""
     if not conversation_id or not settings.openai_api_key:
         return
     try:
@@ -62,10 +60,6 @@ async def generate_reply(
     user_text: str,
     context_text: str | None = None,
 ) -> OpenAIReply:
-    """
-    One turn in an existing OpenAI conversation. History is stored server-side;
-    this turn only sends the user message (plus optional session context block).
-    """
     client = _client()
 
     ctx = (context_text or "").strip()

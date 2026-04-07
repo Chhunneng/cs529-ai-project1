@@ -3,8 +3,7 @@
 Chat-first AI Resume Agent platform scaffold:
 
 - **frontend**: Next.js + shadcn/ui chat shell (loads messages from the API; assistant replies arrive via **SSE**, not polling)
-- **backend**: FastAPI (API-only) + async SQLAlchemy + Alembic + structlog — includes **`pdflatex`** for resume PDF compilation (internal HTTP endpoint used by the worker)
-- **worker**: background job consumer (Redis queue) — calls OpenAI for chat and the backend’s **`/api/v1/internal/compile`** for PDFs
+- **backend**: FastAPI + async SQLAlchemy + Alembic + structlog — includes **`pdflatex`** for resume PDF compilation (internal HTTP endpoint). The **`worker`** Compose service runs **`python -m app.worker.runner`** from the **same backend image** (Redis queue consumer for chat + resume render jobs).
 - **postgres**: persistence + `pgvector` extension
 - **redis**: job queue (`queue:agent-jobs`) and **pub/sub** (`chat:reply:{user_message_id}`) so the worker can notify the API when an assistant message is saved
 

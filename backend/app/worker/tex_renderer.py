@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.resume_fill_models import ResumeFillAtsV1
+from app.worker.resume_fill_models import ResumeFillAtsV1
 
 
 def _latex_escape(s: str) -> str:

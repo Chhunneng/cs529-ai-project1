@@ -7,7 +7,7 @@ from typing import Any, Literal
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.config import settings
+from app.core.config import settings
 
 
 IntentLabel = Literal[
@@ -55,11 +55,6 @@ _INTENT_SCHEMA: dict[str, Any] = {
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=1, max=8))
 async def classify_intent(*, user_text: str) -> IntentResult:
-    """
-    Phase 1: small LLM-based intent classifier.
-
-    Output is strict JSON so downstream routing is deterministic.
-    """
     client = _client()
     resp = await client.responses.create(
         model=settings.openai_model,
@@ -104,4 +99,3 @@ async def classify_intent(*, user_text: str) -> IntentResult:
     confidence = float(data.get("confidence") or 0.0)
     rationale = str(data.get("rationale") or "")
     return IntentResult(intent=intent, confidence=confidence, rationale=rationale)
-

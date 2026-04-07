@@ -26,11 +26,10 @@ services:
       - watchfiles
       - --filter
       - python
-      - python -m app.worker
+      - python -m app.worker.runner
       - /app/app
     volumes:
-      - ./worker/app:/app/app
-      - ./backend/templates:/app/templates
+      - ./backend:/app
 
   frontend:
     volumes:

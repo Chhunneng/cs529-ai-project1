@@ -1,4 +1,4 @@
-"""Redis queue job payloads. Keep in sync with worker/app/queue_jobs/payloads.py."""
+"""Redis queue job payloads (API enqueue, worker dequeue)."""
 
 from __future__ import annotations
 

@@ -16,7 +16,7 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir poetry
 
-COPY pyproject.toml /app/pyproject.toml
+COPY pyproject.toml poetry.lock /app/
 
 RUN poetry install --no-ansi
 

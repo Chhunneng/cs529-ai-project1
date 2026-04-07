@@ -8,7 +8,7 @@ import structlog
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.config import settings
+from app.core.config import settings
 
 log = structlog.get_logger()
 
@@ -20,14 +20,6 @@ def _client() -> AsyncOpenAI:
 
 
 def _schema_for_api(schema: dict[str, Any]) -> dict[str, Any]:
-    """
-    Normalize JSON Schema for OpenAI structured outputs.
-
-    OpenAI is stricter than typical JSON Schema validators:
-    - For any object with `properties`, `required` must exist and include *every* key in `properties`.
-    - Some meta keys (like `$schema`) are rejected.
-    """
-
     def normalize(node: Any) -> Any:
         if isinstance(node, dict):
             out = {}
@@ -36,7 +28,6 @@ def _schema_for_api(schema: dict[str, Any]) -> dict[str, Any]:
                     continue
                 out[k] = normalize(v)
 
-            # If an object defines properties, OpenAI expects required to include all of them.
             if isinstance(out.get("properties"), dict):
                 prop_keys = list(out["properties"].keys())
                 out["required"] = prop_keys
@@ -56,9 +47,6 @@ async def generate_resume_fill_json(
     resume_context: str,
     job_description_context: str | None,
 ) -> dict[str, Any]:
-    """
-    Responses API + Structured Outputs (json_schema) per OpenAI docs.
-    """
     client = _client()
     api_schema = _schema_for_api(schema)
     user_parts: list[str] = [

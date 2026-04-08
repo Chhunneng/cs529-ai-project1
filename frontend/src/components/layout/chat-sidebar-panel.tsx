@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Layers, MessageCirclePlus, Trash2 } from "lucide-react";
 
 import type { SessionResponse } from "@/lib/api";
-import { SIDEBAR_NAV, navActive } from "@/components/layout/app-nav";
+import { SidebarNavMenu } from "@/components/layout/sidebar-nav-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,42 +116,12 @@ export function ChatSidebarPanel({
             Navigation
           </div>
         </div>
-        <div className="flex flex-col gap-0.5 rounded-xl border border-sidebar-border/70 bg-muted/15 p-1.5 shadow-sm backdrop-blur-sm">
-          {SIDEBAR_NAV.map((item) => {
-            const active = navActive(pathname, item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                onClick={() => {
-                  onDismissNewChatError?.();
-                  onNavigate?.();
-                }}
-                className={cn(
-                  "flex flex-row items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors outline-none",
-                  "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
-                  active
-                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-sm"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/70",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-md border border-transparent",
-                    active
-                      ? "border-sidebar-border/80 bg-sidebar-primary/15 text-sidebar-primary"
-                      : "bg-background/60 text-muted-foreground",
-                  )}
-                  aria-hidden
-                >
-                  <Icon className="size-4" strokeWidth={2} />
-                </span>
-                <span className="min-w-0 leading-snug">{item.label}</span>
-              </Link>
-            );
-          })}
+        <div className="rounded-xl border border-sidebar-border/70 bg-muted/15 p-1.5 shadow-sm backdrop-blur-sm">
+          <SidebarNavMenu
+            pathname={pathname}
+            onNavigate={onNavigate}
+            onDismissNewChatError={onDismissNewChatError}
+          />
         </div>
       </nav>
 
@@ -220,7 +189,7 @@ export function ChatSidebarPanel({
                   key={id}
                   className={cn(
                     "group relative flex items-start gap-0.5 rounded-xl border border-transparent transition-colors",
-                    "hover:bg-sidebar-accent/80",
+                    "hover:bg-sidebar-accent",
                     id === activeSessionId &&
                       "border-sidebar-border bg-sidebar-accent text-sidebar-accent-foreground shadow-sm",
                     id !== activeSessionId && "text-sidebar-foreground",

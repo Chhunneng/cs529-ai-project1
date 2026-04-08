@@ -148,12 +148,11 @@ async def get_active_job_description(ctx: RunContextWrapper[ChatToolContext]) ->
     jid = ctx.context.active_jd_id
     assert jid is not None
     text = await fetch_job_description_excerpt(
-        session_id=ctx.context.session_id,
         jd_id=jid,
         max_chars=settings.openai.agent_jd_tool_max_chars,
     )
     if text is None:
-        return "Active job description was not found for this session."
+        return "Active job description was not found."
     return text
 
 

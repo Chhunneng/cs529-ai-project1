@@ -65,8 +65,8 @@ def _unlink_if_under_artifacts(path_str: str | None, artifacts_root: Path) -> No
 
 async def delete_session_by_id(session: AgentSession, db: AsyncSession) -> bool:
     """
-    Remove session row (CASCADE: messages, runs, JDs, resume_outputs).
-    Clears FK pointers that would block CASCADE on job_descriptions, then deletes
+    Remove session row (CASCADE: messages, runs, resume_outputs).
+    Clears FK pointers on the session row, then deletes
     PDF/TeX files for outputs under ``artifacts_dir``.
     """
 

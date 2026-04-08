@@ -1,14 +1,8 @@
-import uuid
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import (
-    get_job_description_for_session_or_404,
-    get_job_description_or_404,
-    get_session_or_404,
-)
+from app.api.v1.deps import get_job_description_or_404, get_session_or_404
 from app.db.session import get_db_session
 from app.models.agent_session import AgentSession
 from app.models.job_description import JobDescription
@@ -28,7 +22,7 @@ async def create_job_description(
     session: AgentSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> JobDescriptionResponse:
-    job_description = JobDescription(session_id=session.id, raw_text=body.raw_text, extracted_json=None)
+    job_description = JobDescription(raw_text=body.raw_text, extracted_json=None)
     db.add(job_description)
     await db.commit()
     await db.refresh(job_description)
@@ -43,19 +37,27 @@ async def create_job_description(
     "/sessions/{session_id}/job-descriptions",
     response_model=list[JobDescriptionResponse],
 )
+async def list_job_descriptions_for_session(
+    _session: AgentSession = Depends(get_session_or_404),
+    db: AsyncSession = Depends(get_db_session),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[JobDescriptionResponse]:
+    """Same global list as ``GET /job-descriptions``; session path kept for compatible URLs."""
+    result = await db.execute(
+        select(JobDescription).order_by(JobDescription.created_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/job-descriptions", response_model=list[JobDescriptionResponse])
 async def list_job_descriptions(
-    session: AgentSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[JobDescriptionResponse]:
     result = await db.execute(
-        select(JobDescription)
-        .where(JobDescription.session_id == session.id)
-        .order_by(JobDescription.created_at.desc())
-        .limit(limit)
+        select(JobDescription).order_by(JobDescription.created_at.desc()).limit(limit)
     )
-    job_descriptions = result.scalars().all()
-    return job_descriptions
+    return list(result.scalars().all())
 
 
 @router.get("/job-descriptions/{job_description_id}", response_model=JobDescriptionResponse)
@@ -71,7 +73,7 @@ async def get_job_description(
 )
 async def activate_job_description(
     session: AgentSession = Depends(get_session_or_404),
-    job_description: JobDescription = Depends(get_job_description_for_session_or_404),
+    job_description: JobDescription = Depends(get_job_description_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
     session.active_jd_id = job_description.id

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import ForeignKey, Text, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,3 +17,4 @@ class ChatMessage(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     role: Mapped[str] = mapped_column(Text, nullable=False)  # "user" | "assistant"
     message: Mapped[str] = mapped_column(Text, nullable=False)
     tool_used: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous_response_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

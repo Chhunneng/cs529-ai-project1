@@ -24,6 +24,7 @@ from app.openai.client import (
 )
 from app.openai.resume_chat_agent import run_resume_chat_agent
 from app.openai.intent import classify_intent
+from app.openai.resume_scope import check_resume_scope
 from app.services.chat_reply_notify import publish_chat_reply
 from app.worker.render_resume import handle_render_resume
 
@@ -86,12 +87,17 @@ async def insert_assistant_message(
 
 async def fetch_session_flags(
     *, session_id: uuid.UUID
-) -> tuple[uuid.UUID | None, uuid.UUID | None, str | None]:
+) -> tuple[uuid.UUID | None, uuid.UUID | None, str | None, str | None]:
     async with AsyncSessionMaker() as db:
         sess = await db.get(AgentSession, session_id)
         if sess is None:
             raise RuntimeError("Session not found")
-        return sess.selected_resume_id, sess.active_jd_id, sess.openai_conversation_id
+        return (
+            sess.selected_resume_id,
+            sess.active_jd_id,
+            sess.openai_conversation_id,
+            sess.previous_response_id,
+        )
 
 
 async def fetch_openai_conversation_id(*, session_id: uuid.UUID) -> str | None:
@@ -176,7 +182,7 @@ async def handle_chat_message_job(job: ChatMessageJob) -> None:
         session_id = session_id_from_db
 
     try:
-        selected_resume_id, active_jd_id, openai_conversation_existing = (
+        selected_resume_id, active_jd_id, openai_conversation_existing, scope_prev_id = (
             await fetch_session_flags(session_id=session_id)
         )
         has_resume = selected_resume_id is not None
@@ -201,23 +207,57 @@ async def handle_chat_message_job(job: ChatMessageJob) -> None:
             reply_usage = None
             tool_calls: list[str] = []
         else:
-            conv_id = await ensure_openai_conversation_id(
-                session_id=session_id, existing=openai_conversation_existing
-            )
-            tool_ctx = ChatToolContext(
-                session_id=session_id,
-                selected_resume_id=selected_resume_id,
-                active_jd_id=active_jd_id,
-            )
-            agent_run = await run_resume_chat_agent(
-                conversation_id=conv_id,
-                user_text=user_text,
-                tool_context=tool_ctx,
-            )
-            assistant_text = agent_run.reply_text
-            reply_model = settings.openai.model
-            reply_usage = agent_run.usage
-            tool_calls = agent_run.tool_calls
+            # Scope guardrail (token-efficient): chain via Responses previous_response_id.
+            # Store the *used* previous_response_id on the user message row for debugging/audit.
+            async with AsyncSessionMaker() as db:
+                msg = await db.get(ChatMessage, message_id)
+                if msg is not None and msg.role == "user":
+                    msg.previous_response_id = scope_prev_id
+                sess = await db.get(AgentSession, session_id)
+                if sess is None:
+                    raise RuntimeError("Session not found")
+                # Ensure we read the current value from DB (not a stale local copy).
+                scope_prev_id = sess.previous_response_id
+                await db.commit()
+
+            scope = await check_resume_scope(user_text=user_text, previous_response_id=scope_prev_id)
+
+            # Advance the session scope thread head even if out-of-scope, so the chain stays consistent.
+            if scope.response_id:
+                async with AsyncSessionMaker() as db:
+                    sess = await db.get(AgentSession, session_id)
+                    if sess is None:
+                        raise RuntimeError("Session not found")
+                    sess.previous_response_id = scope.response_id
+                    await db.commit()
+                scope_prev_id = scope.response_id
+
+            if not scope.is_related_to_resume_job:
+                assistant_text = (
+                    "I'm only set up to help with resumes, job descriptions, and tailoring in this app. "
+                    "Ask something in that area—like updating your resume, reviewing a job posting, or matching your resume to a role."
+                )
+                reply_model = settings.openai.model
+                reply_usage = None
+                tool_calls = ["scope_guardrail"]
+            else:
+                conv_id = await ensure_openai_conversation_id(
+                    session_id=session_id, existing=openai_conversation_existing
+                )
+                tool_ctx = ChatToolContext(
+                    session_id=session_id,
+                    selected_resume_id=selected_resume_id,
+                    active_jd_id=active_jd_id,
+                )
+                agent_run = await run_resume_chat_agent(
+                    conversation_id=conv_id,
+                    user_text=user_text,
+                    tool_context=tool_ctx,
+                )
+                assistant_text = agent_run.reply_text
+                reply_model = settings.openai.model
+                reply_usage = agent_run.usage
+                tool_calls = agent_run.tool_calls
 
         assistant_id = await insert_assistant_message(
             session_id=session_id,

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel
+
 import structlog
 from agents import Agent, Runner, function_tool, set_default_openai_client
 from agents.exceptions import InputGuardrailTripwireTriggered
@@ -34,9 +36,9 @@ log = structlog.get_logger()
 
 _agents_sdk_client_configured = False
 
-_SCOPE_REFUSAL = (
-    "I'm a resume and job-description assistant for this app. I can't follow instructions "
-    "that try to override my role. Ask me to help with your resume, a job description, or tailoring."
+_OFF_TOPIC_SCOPE_REFUSAL = (
+    "I'm only set up to help with resumes, job descriptions, and tailoring in this app. "
+    "Ask something in that area—like updating your resume, reviewing a job posting, or matching your resume to a role."
 )
 
 _INJECTION_SUBSTRINGS = (
@@ -191,45 +193,11 @@ async def _inject_workspace_instructions(data: CallModelData[ChatToolContext]) -
     return ModelInputData(input=list(model_data.input), instructions=base + block)
 
 
-@input_guardrail(name="resume_scope", run_in_parallel=False)
-async def resume_scope_input_guardrail(
-    ctx: RunContextWrapper[ChatToolContext],
-    _agent: Agent[Any],
-    user_input: str | list[TResponseInputItem],
-) -> GuardrailFunctionOutput:
-    if not isinstance(user_input, str):
-        return GuardrailFunctionOutput(
-            output_info={"scope": "skipped_non_string_input"},
-            tripwire_triggered=False,
-        )
-    raw = user_input.strip()
-    if not raw:
-        return GuardrailFunctionOutput(
-            output_info={
-                "reason": "empty_message",
-                "suggested_reply": "Send a message about your resume or a job description.",
-            },
-            tripwire_triggered=True,
-        )
-    lower = raw.lower()
-    for needle in _INJECTION_SUBSTRINGS:
-        if needle in lower:
-            log.warning(
-                "resume_scope_guardrail_tripwire",
-                reason="injection_pattern",
-                session_id=str(ctx.context.session_id),
-            )
-            return GuardrailFunctionOutput(
-                output_info={"reason": "injection_pattern", "suggested_reply": _SCOPE_REFUSAL},
-                tripwire_triggered=True,
-            )
-    return GuardrailFunctionOutput(output_info={"scope": "ok"}, tripwire_triggered=False)
-
 
 def _resume_chat_run_config() -> RunConfig:
     return RunConfig(
         call_model_input_filter=_inject_workspace_instructions,
-        input_guardrails=[resume_scope_input_guardrail],
+        input_guardrails=[],
     )
 
 
@@ -293,7 +261,7 @@ def _reply_from_scope_tripwire(exc: InputGuardrailTripwireTriggered) -> str:
         sr = info.get("suggested_reply")
         if isinstance(sr, str) and sr.strip():
             return sr.strip()
-    return _SCOPE_REFUSAL
+    return _OFF_TOPIC_SCOPE_REFUSAL
 
 
 async def run_resume_chat_agent(

@@ -113,13 +113,9 @@ async def _fetch_resume_text(resume_id: uuid.UUID) -> str | None:
         return None
 
 
-async def _fetch_jd_text(session_id: uuid.UUID, jd_id: uuid.UUID) -> str | None:
+async def _fetch_jd_text(jd_id: uuid.UUID) -> str | None:
     async with AsyncSessionMaker() as db:
-        jd = await db.scalar(
-            select(JobDescription).where(
-                JobDescription.id == jd_id, JobDescription.session_id == session_id
-            )
-        )
+        jd = await db.scalar(select(JobDescription).where(JobDescription.id == jd_id))
         if jd is None:
             return None
         return str(jd.raw_text)
@@ -136,11 +132,6 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
         template_id = str(ctx["template_id"])
         latex_source = ctx.get("latex_source")
         schema_json: dict[str, Any] = ctx["schema_json"]
-        session_id = ctx["session_id"]
-        if isinstance(session_id, uuid.UUID):
-            sid = session_id
-        else:
-            sid = uuid.UUID(str(session_id))
 
         raw_input = ctx.get("input_json") or {}
         if isinstance(raw_input, str):
@@ -159,7 +150,7 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
         jd_context: str | None = None
         if job_description_id_raw:
             jdid = uuid.UUID(str(job_description_id_raw))
-            jd_context = await _fetch_jd_text(sid, jdid)
+            jd_context = await _fetch_jd_text(jdid)
 
         fill_obj = await generate_resume_fill_json(
             schema=schema_json,

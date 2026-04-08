@@ -21,14 +21,9 @@ async def load_resume_row(*, resume_id: uuid.UUID) -> Resume | None:
         return await db.get(Resume, resume_id)
 
 
-async def load_job_description_row(*, session_id: uuid.UUID, jd_id: uuid.UUID) -> JobDescription | None:
+async def load_job_description_row(*, jd_id: uuid.UUID) -> JobDescription | None:
     async with AsyncSessionMaker() as db:
-        return await db.scalar(
-            select(JobDescription).where(
-                JobDescription.id == jd_id,
-                JobDescription.session_id == session_id,
-            )
-        )
+        return await db.scalar(select(JobDescription).where(JobDescription.id == jd_id))
 
 
 def resume_source_text(resume: Resume) -> str:
@@ -132,10 +127,8 @@ def search_resume_text(
     return note + "\n".join(parts)
 
 
-async def fetch_job_description_excerpt(
-    *, session_id: uuid.UUID, jd_id: uuid.UUID, max_chars: int
-) -> str | None:
-    jd = await load_job_description_row(session_id=session_id, jd_id=jd_id)
+async def fetch_job_description_excerpt(*, jd_id: uuid.UUID, max_chars: int) -> str | None:
+    jd = await load_job_description_row(jd_id=jd_id)
     if jd is None:
         return None
     raw = str(jd.raw_text or "").strip()

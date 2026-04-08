@@ -116,13 +116,11 @@ export function ChatSidebarPanel({
             Navigation
           </div>
         </div>
-        <div className="rounded-xl border border-sidebar-border/70 bg-muted/15 p-1.5 shadow-sm backdrop-blur-sm">
-          <SidebarNavMenu
-            pathname={pathname}
-            onNavigate={onNavigate}
-            onDismissNewChatError={onDismissNewChatError}
-          />
-        </div>
+        <SidebarNavMenu
+          pathname={pathname}
+          onNavigate={onNavigate}
+          onDismissNewChatError={onDismissNewChatError}
+        />
       </nav>
 
       <Separator className="bg-sidebar-border" />

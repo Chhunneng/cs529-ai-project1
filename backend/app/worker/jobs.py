@@ -141,7 +141,6 @@ async def create_job_description_and_activate(
         db.add(
             JobDescription(
                 id=jd_id,
-                session_id=session_id,
                 raw_text=raw_text,
                 extracted_json=None,
             )

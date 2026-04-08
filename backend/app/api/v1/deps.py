@@ -60,17 +60,3 @@ async def get_job_description_or_404(
     if job_description is None:
         raise HTTPException(status_code=404, detail="Job description not found")
     return job_description
-
-
-async def get_job_description_for_session_or_404(
-    session_id: uuid.UUID, job_description_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)
-) -> JobDescription:
-    result = await db.execute(
-        select(JobDescription).where(
-            JobDescription.id == job_description_id, JobDescription.session_id == session_id
-        )
-    )
-    job_description = result.scalar_one_or_none()
-    if job_description is None:
-        raise HTTPException(status_code=404, detail="Job description not found for this session")
-    return job_description

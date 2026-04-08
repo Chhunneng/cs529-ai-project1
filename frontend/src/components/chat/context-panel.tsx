@@ -22,6 +22,7 @@ import {
   type ResumeTemplateListItem,
   type SessionResponse,
 } from "@/lib/api";
+import { PasteJobDescriptionDialog } from "@/components/job-descriptions/paste-job-description-dialog";
 import { TemplateManagerSheet } from "@/components/templates/template-manager-sheet";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +107,8 @@ export function ContextPanel({
   const [resumeJsonView, setResumeJsonView] = useState<ResumeListItem | null>(null);
   const [jdOpen, setJdOpen] = useState(false);
   const [jdDraft, setJdDraft] = useState("");
+  const [jdPasteBusy, setJdPasteBusy] = useState(false);
+  const [jdPasteError, setJdPasteError] = useState<string | null>(null);
 
   const loadLists = useCallback(async () => {
     if (!apiReady) return;
@@ -127,14 +130,14 @@ export function ContextPanel({
   }, [apiReady]);
 
   const loadJds = useCallback(async () => {
-    if (!apiReady || !sessionId) return;
+    if (!apiReady) return;
     try {
-      const rows = await listJobDescriptions({ session_id: sessionId, limit: 50 });
+      const rows = await listJobDescriptions({ limit: 50 });
       setJds(rows);
     } catch {
       setJds([]);
     }
-  }, [apiReady, sessionId]);
+  }, [apiReady]);
 
   const recentResumes = useMemo(() => {
     return [...resumes]
@@ -151,10 +154,17 @@ export function ContextPanel({
   }, [sessionId]);
 
   useEffect(() => {
+    if (!apiReady) {
+      setJds([]);
+      return;
+    }
+    void loadJds();
+  }, [apiReady, loadJds]);
+
+  useEffect(() => {
     if (!sessionId || !apiReady) {
       setSession(null);
       setResumeValue(NONE);
-      setJds([]);
       setJdValue(JD_NONE);
       return;
     }
@@ -174,11 +184,10 @@ export function ContextPanel({
       .finally(() => {
         if (!cancelled) setSessionLoading(false);
       });
-    void loadJds();
     return () => {
       cancelled = true;
     };
-  }, [sessionId, apiReady, loadJds]);
+  }, [sessionId, apiReady]);
 
   async function onResumeChange(value: string) {
     if (!sessionId || !apiReady) return;
@@ -261,16 +270,21 @@ export function ContextPanel({
     if (!apiReady || !sessionId) return;
     const text = jdDraft.trim();
     if (!text) return;
+    setJdPasteError(null);
+    setJdPasteBusy(true);
     try {
       const jd = await createJobDescription({ session_id: sessionId, raw_text: text, set_active: true });
       setJdOpen(false);
       setJdDraft("");
+      setJdPasteError(null);
       setJdValue(jd.id);
       const s = await getSession(sessionId);
       setSession(s);
       await loadJds();
     } catch (e) {
-      setOutputNotice(e instanceof Error ? e.message : "Could not save job description.");
+      setJdPasteError(e instanceof Error ? e.message : "Could not save job description.");
+    } finally {
+      setJdPasteBusy(false);
     }
   }
 
@@ -514,12 +528,12 @@ export function ContextPanel({
                   type="button"
                   onClick={() => setJdOpen(true)}
                 >
-                  Paste job
+                  Paste posting
                 </Button>
               </div>
               <CardDescription className="text-xs leading-relaxed">
-                Choose which saved job is linked to this chat (or None so the assistant does not use a
-                job description). Paste job saves a new one and selects it.
+                Choose which saved posting is active for this chat (or None). Paste posting saves to the shared
+                library and sets it active here.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 p-4">
@@ -757,32 +771,31 @@ export function ContextPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={jdOpen} onOpenChange={setJdOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Paste job description</DialogTitle>
-            <DialogDescription>
-              Paste the full job description text. It will be saved to this session and used for tailoring.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <textarea
-              value={jdDraft}
-              onChange={(e) => setJdDraft(e.target.value)}
-              placeholder="Paste the job description here…"
-              className="min-h-[180px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
-            />
-          </div>
-          <DialogFooter className="flex flex-row gap-2 sm:justify-end">
-            <Button variant="outline" onClick={() => setJdOpen(false)}>
-              Cancel
-            </Button>
-            <Button disabled={!jdDraft.trim()} onClick={() => void handlePasteJd()}>
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PasteJobDescriptionDialog
+        open={jdOpen}
+        onOpenChange={(o) => {
+          setJdOpen(o);
+          if (!o) {
+            setJdDraft("");
+            setJdPasteError(null);
+          }
+        }}
+        title="Paste job posting"
+        description={
+          <>
+            Saves the text to the shared library and sets it as the active posting for your selected chat (for PDFs
+            and tailoring).
+          </>
+        }
+        value={jdDraft}
+        onValueChange={setJdDraft}
+        error={jdPasteError}
+        confirmLabel="Save and set active"
+        confirmBusyLabel="Saving…"
+        onConfirm={handlePasteJd}
+        isSubmitting={jdPasteBusy}
+        confirmDisabled={!apiReady || !sessionId}
+      />
     </ContextPanelOuter>
   );
 }

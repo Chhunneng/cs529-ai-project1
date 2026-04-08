@@ -11,7 +11,6 @@ class JobDescriptionCreateBody(BaseModel):
 
 class JobDescriptionResponse(BaseModel):
     id: uuid.UUID
-    session_id: uuid.UUID
     raw_text: str
     extracted_json: dict | None
     created_at: datetime

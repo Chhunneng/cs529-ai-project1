@@ -60,7 +60,7 @@ def _extract_text(ext: str, data: bytes) -> str:
 
 
 def absolute_upload_path(storage_relpath: str) -> Path | None:
-    base = Path(settings.resume_uploads_dir).resolve()
+    base = Path(settings.storage.resume_uploads_dir).resolve()
     target = (base / storage_relpath).resolve()
     try:
         target.relative_to(base)
@@ -106,7 +106,7 @@ async def create_resume_from_upload(
     *, db: AsyncSession, upload: UploadFile
 ) -> Resume:
     ext = _extension_from_filename(upload.filename)
-    data = await read_upload_bytes(upload, settings.resume_upload_max_bytes)
+    data = await read_upload_bytes(upload, settings.storage.resume_upload_max_bytes)
     content_text = _extract_text(ext, data)
     if not content_text:
         raise ResumeUploadError(

@@ -15,6 +15,7 @@ import {
   type ResumeTemplateListItem,
   type SessionResponse,
 } from "@/lib/api";
+import { AppPageHeader } from "@/components/layout/app-page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,8 +29,12 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const NONE = "__none__";
+import {
+  SELECT_NONE as NONE,
+  labelResumeSelectValue,
+  labelSessionSelectValue,
+  labelTemplateSelectValue,
+} from "@/lib/select-display";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -125,12 +130,10 @@ export function OutputsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <header className="shrink-0 border-b border-border/80 bg-card/40 px-4 py-3 backdrop-blur-sm md:px-5">
-        <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">PDF exports</h1>
-        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-          Build a resume PDF from a chat session, optional resume, and the job posting you set as active.
-        </p>
-      </header>
+      <AppPageHeader
+        title="PDF exports"
+        description="Build a resume PDF from a chat session, optional resume, and the job posting you set as active."
+      />
 
       <div className="flex flex-col gap-4 p-4 md:p-5">
         {notice ? (
@@ -160,10 +163,12 @@ export function OutputsPage() {
                     </div>
                     <Select value={sessionId} onValueChange={(v) => setSessionId(v ?? NONE)}>
                       <SelectTrigger className="w-full" size="sm">
-                        <SelectValue placeholder="Select session" />
+                        <SelectValue placeholder="Choose a session…">
+                          {(value) => labelSessionSelectValue(value, sessions)}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NONE}>None</SelectItem>
+                        <SelectItem value={NONE}>No session selected</SelectItem>
                         {sessions.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
                             {s.id.slice(0, 8)}… ({new Date(s.created_at).toLocaleDateString()})
@@ -180,10 +185,12 @@ export function OutputsPage() {
                     </div>
                     <Select value={resumeId} onValueChange={(v) => setResumeId(v ?? NONE)}>
                       <SelectTrigger className="w-full" size="sm">
-                        <SelectValue placeholder="Select resume" />
+                        <SelectValue placeholder="Choose a resume…">
+                          {(value) => labelResumeSelectValue(value, resumes, NONE)}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NONE}>None</SelectItem>
+                        <SelectItem value={NONE}>No resume selected</SelectItem>
                         {resumes.map((r) => (
                           <SelectItem key={r.id} value={r.id}>
                             {r.id.slice(0, 8)}… ({new Date(r.created_at).toLocaleDateString()})
@@ -199,10 +206,12 @@ export function OutputsPage() {
                     </div>
                     <Select value={templateId} onValueChange={(v) => setTemplateId(v ?? NONE)}>
                       <SelectTrigger className="w-full" size="sm">
-                        <SelectValue placeholder="Select template" />
+                        <SelectValue placeholder="Choose a template…">
+                          {(value) => labelTemplateSelectValue(value, templates, NONE)}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NONE}>None</SelectItem>
+                        <SelectItem value={NONE}>No template selected</SelectItem>
                         {templates.map((t) => (
                           <SelectItem key={t.id} value={t.id}>
                             {t.name}

@@ -73,7 +73,7 @@ async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
     if not raw:
         raise ValueError("resume_text is empty")
 
-    truncated = _truncate_for_model(raw, settings.resume_extract_max_input_chars)
+    truncated = _truncate_for_model(raw, settings.openai.resume_extract_max_input_chars)
     client = async_openai_client()
     api_schema = _schema_for_api(RESUME_PROFILE_V1_SCHEMA)
 
@@ -133,7 +133,7 @@ async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
     )
 
     resp = await client.responses.create(
-        model=settings.openai_model,
+        model=settings.openai.model,
         input=[
             {
                 "role": "system",

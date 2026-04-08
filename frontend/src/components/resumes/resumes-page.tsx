@@ -11,6 +11,7 @@ import {
   uploadResume,
   type ResumeListItem,
 } from "@/lib/api";
+import { AppPageHeader } from "@/components/layout/app-page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -144,13 +145,10 @@ export function ResumesPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <header className="shrink-0 border-b border-border/80 bg-card/40 px-4 py-3 backdrop-blur-sm md:px-5">
-        <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">Your resumes</h1>
-        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-          Upload a resume (PDF, TXT, or DOCX). The text is saved for chat context, and you can download your file
-          anytime.
-        </p>
-      </header>
+      <AppPageHeader
+        title="Your resumes"
+        description="Upload a resume (PDF, TXT, or DOCX). The text is saved for chat context, and you can download your file anytime."
+      />
 
       <div className="flex flex-col gap-4 p-4 md:p-5">
         {connection === "offline" ? (

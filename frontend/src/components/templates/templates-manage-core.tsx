@@ -6,7 +6,6 @@ import { pingBackend } from "@/lib/api";
 import { TemplateEditor } from "@/components/templates/template-editor";
 import { useTemplates } from "@/components/templates/use-templates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -28,9 +27,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { listRowClasses } from "@/lib/list-row-styles";
+import { SELECT_NONE as NONE, labelTemplateSelectValue } from "@/lib/select-display";
+import { cn } from "@/lib/utils";
 import { Trash2 } from "lucide-react";
-
-const NONE = "__none__";
 
 function defaultSchema(): Record<string, unknown> {
   return {
@@ -212,10 +212,12 @@ export function TemplatesManageCore({
                 <>
                   <Select value={picker} onValueChange={(v) => setPicker(v ?? NONE)}>
                     <SelectTrigger className="w-full" size="sm">
-                      <SelectValue placeholder="Select a template" />
+                      <SelectValue placeholder="Choose a template…">
+                        {(value) => labelTemplateSelectValue(value, items, NONE)}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={NONE}>None</SelectItem>
+                      <SelectItem value={NONE}>No template selected</SelectItem>
                       {items.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.name}
@@ -231,10 +233,15 @@ export function TemplatesManageCore({
                         <div
                           key={t.id}
                           role="row"
-                          className="flex min-h-11 w-full shrink-0 items-center gap-2 rounded-lg border border-border/70 bg-muted/10 px-2 py-1.5 pl-3 text-left text-sm hover:bg-muted/20"
+                          data-state={isActive ? "selected" : undefined}
+                          className={cn(
+                            "flex min-h-11 w-full shrink-0 items-center gap-2 px-2 py-1.5 pl-3 text-left text-sm",
+                            listRowClasses(isActive),
+                          )}
                         >
                           <button
                             type="button"
+                            aria-current={isActive ? "true" : undefined}
                             onClick={() => setPicker(t.id)}
                             className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-center gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 rounded-sm -my-0.5 py-1"
                           >
@@ -243,12 +250,6 @@ export function TemplatesManageCore({
                               {t.id.slice(0, 8)}…{t.id.slice(-4)}
                             </span>
                           </button>
-                          <Badge
-                            variant={isActive ? "default" : "secondary"}
-                            className="shrink-0 self-center whitespace-nowrap text-[10px] uppercase tracking-wide"
-                          >
-                            {isActive ? "Active" : "—"}
-                          </Badge>
                           <Button
                             type="button"
                             variant="ghost"

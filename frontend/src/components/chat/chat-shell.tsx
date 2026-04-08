@@ -1,85 +1,133 @@
 "use client";
 
+import { useState } from "react";
+
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ContextPanel } from "@/components/chat/context-panel";
 import { ChatThread } from "@/components/chat/chat-thread";
 import { useChat } from "@/components/chat/use-chat";
 import { useChatWorkspace } from "@/components/chat/use-chat-workspace";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 export function ChatShell() {
   const { activeSessionId, retryConnection, isOffline, isReady } = useChatWorkspace();
+  /** Inline context column only when sidebar + chat + panel fit (Tailwind lg). */
+  const showInlineContext = useMediaQuery("(min-width: 1024px)");
+  const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
 
   const { messages, isSending, canSend, sendMessage } = useChat(activeSessionId, isOffline);
 
+  const apiOk = isReady && !isOffline;
+
   return (
     <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex flex-col gap-2 border-b border-border/80 bg-card/40 px-4 py-3 backdrop-blur-sm md:px-5">
-          <div className="flex min-h-8 flex-col gap-0.5">
-            <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">
-              Chat
-            </h1>
+      <header className="flex flex-col gap-2 border-b border-border/80 bg-card/40 px-4 py-3 backdrop-blur-sm md:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="flex min-h-8 min-w-0 flex-1 flex-col gap-0.5">
+            <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">Chat</h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Message the assistant and use the right panel to link resumes, jobs, and PDFs.
+              {showInlineContext
+                ? "Message the assistant and use the right panel to link resumes, jobs, and PDFs."
+                : "Message the assistant. Use Session tools to link resumes, jobs, and PDFs."}
             </p>
           </div>
-          {isOffline ? (
-            <Alert variant="destructive" className="border-destructive/50">
-              <AlertTitle>Can&apos;t reach the server</AlertTitle>
-              <AlertDescription className="flex flex-col gap-2">
-                <span>Check that the API is running and your app points to the correct URL.</span>
-                <button
-                  type="button"
-                  className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
-                  onClick={() => retryConnection()}
-                >
-                  Retry
-                </button>
-              </AlertDescription>
-            </Alert>
+          {!showInlineContext ? (
+            <Sheet open={sessionSheetOpen} onOpenChange={setSessionSheetOpen}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 self-start sm:self-center"
+                onClick={() => setSessionSheetOpen(true)}
+              >
+                Session tools
+              </Button>
+              <SheetContent
+                side="right"
+                showCloseButton
+                className="flex w-full flex-col gap-0 overflow-hidden overscroll-y-contain p-0 sm:max-w-lg"
+              >
+                <SheetHeader className="shrink-0 border-b border-border/80 px-4 py-4 text-left">
+                  <SheetTitle>Session workspace</SheetTitle>
+                  <SheetDescription>
+                    Link resumes, job descriptions, and templates for this chat, then generate a PDF.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+                  <ContextPanel
+                    sessionId={activeSessionId}
+                    apiReady={apiOk}
+                    variant="embedded"
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
           ) : null}
-        </header>
-
-        <div className="flex min-h-0 flex-1 gap-4 p-3 md:gap-5 md:p-5">
-          <Card className="flex min-w-0 flex-1 flex-col overflow-hidden border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 px-4 pt-4 pb-5 md:px-5">
-              {!activeSessionId && !isOffline ? (
-                <Empty className="min-h-[220px] border-none bg-muted/15 py-10">
-                  <EmptyHeader>
-                    <EmptyTitle className="font-semibold tracking-tight">Pick a conversation</EmptyTitle>
-                    <EmptyDescription className="max-w-sm opacity-90">
-                      Use <strong>New chat</strong> or choose a chat under Recent chats.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : activeSessionId ? (
-                <ChatThread messages={messages} isSending={isSending} />
-              ) : (
-                <Empty className="min-h-[220px] border-none bg-muted/15 py-10">
-                  <EmptyHeader>
-                    <EmptyTitle className="font-semibold tracking-tight">You&apos;re offline</EmptyTitle>
-                    <EmptyDescription>Connect to the server to send messages.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              )}
-              <ChatComposer
-                disabled={!canSend}
-                isSending={isSending}
-                onSend={sendMessage}
-              />
-            </CardContent>
-          </Card>
-
-          <ContextPanel sessionId={activeSessionId} apiReady={isReady && !isOffline} />
         </div>
+        {isOffline ? (
+          <Alert variant="destructive" className="border-destructive/50">
+            <AlertTitle>Can&apos;t reach the server</AlertTitle>
+            <AlertDescription className="flex flex-col gap-2">
+              <span>Check that the API is running and your app points to the correct URL.</span>
+              <button
+                type="button"
+                className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
+                onClick={() => retryConnection()}
+              >
+                Retry
+              </button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+      </header>
+
+      <div className="flex min-h-0 flex-1 p-2 md:p-2">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 w-full max-w-3xl flex-1 flex-col gap-2">
+            {!activeSessionId && !isOffline ? (
+              <Empty className="min-h-[200px] border-none bg-transparent py-8">
+                <EmptyHeader>
+                  <EmptyTitle className="font-semibold tracking-tight">Pick a conversation</EmptyTitle>
+                  <EmptyDescription className="max-w-sm opacity-90">
+                    Use <strong>New chat</strong> or choose a chat under Recent chats.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : activeSessionId ? (
+              <ChatThread messages={messages} isSending={isSending} />
+            ) : (
+              <Empty className="min-h-[200px] border-none bg-transparent py-8">
+                <EmptyHeader>
+                  <EmptyTitle className="font-semibold tracking-tight">You&apos;re offline</EmptyTitle>
+                  <EmptyDescription>Connect to the server to send messages.</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            )}
+            <Separator className="bg-border/50" />
+            <ChatComposer disabled={!canSend} isSending={isSending} onSend={sendMessage} />
+          </div>
+        </div>
+
+        {showInlineContext ? (
+          <ContextPanel sessionId={activeSessionId} apiReady={apiOk} variant="sidebar" />
+        ) : null}
+      </div>
     </main>
   );
 }

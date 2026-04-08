@@ -51,7 +51,7 @@ _INTENT_SCHEMA: dict[str, Any] = {
 async def classify_intent(*, user_text: str) -> IntentResult:
     client = async_openai_client()
     resp = await client.responses.create(
-        model=settings.openai_model,
+        model=settings.openai.model,
         input=[
             {
                 "role": "system",

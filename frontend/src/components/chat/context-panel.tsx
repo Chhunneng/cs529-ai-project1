@@ -43,20 +43,43 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const NONE = "__none__";
-const JD_NONE = "__jd_none__";
+import {
+  SELECT_NONE as NONE,
+  SELECT_NONE_JOB as JD_NONE,
+  labelJobSelectValue,
+  labelResumeSelectValue,
+  labelTemplateSelectValue,
+} from "@/lib/select-display";
+import { listRowClasses } from "@/lib/list-row-styles";
+import { cn } from "@/lib/utils";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function ContextPanelOuter({
+  variant,
+  className,
+  children,
+}: {
+  variant: "sidebar" | "embedded";
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (variant === "embedded") {
+    return <div className={className}>{children}</div>;
+  }
+  return <aside className={className}>{children}</aside>;
+}
+
 export function ContextPanel({
   sessionId,
   apiReady,
+  variant = "sidebar",
 }: {
   sessionId: string | null;
   apiReady: boolean;
+  variant?: "sidebar" | "embedded";
 }) {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -287,23 +310,42 @@ export function ContextPanel({
 
   if (!sessionId) {
     return (
-      <aside className="hidden w-[360px] shrink-0 md:block">
-        <Card className="h-full border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
-          <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15 pb-4">
+      <ContextPanelOuter
+        variant={variant}
+        className={cn(
+          variant === "embedded"
+            ? "flex min-h-0 w-full flex-1 flex-col"
+            : "hidden w-[320px] shrink-0 lg:block xl:w-[360px]",
+        )}
+      >
+        <Card className="h-full border border-border/40 bg-card/80 shadow-sm ring-0 backdrop-blur-sm">
+          <CardHeader className="flex flex-col gap-1 border-b border-border/35 bg-muted/5 pb-4">
             <CardTitle className="text-base font-semibold tracking-tight">Workspace</CardTitle>
             <CardDescription className="text-sm leading-relaxed">
               Open or start a chat — then link a resume, job description, template, and PDF output here.
             </CardDescription>
           </CardHeader>
         </Card>
-      </aside>
+      </ContextPanelOuter>
     );
   }
 
   return (
-    <aside className="hidden w-[380px] shrink-0 md:block lg:w-[400px]">
-      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-        <div className="shrink-0 px-0.5">
+    <ContextPanelOuter
+      variant={variant}
+      className={cn(
+        variant === "embedded"
+          ? "flex min-h-0 w-full flex-col"
+          : "hidden w-[320px] shrink-0 lg:block xl:w-[400px]",
+      )}
+    >
+      <div
+        className={cn(
+          "flex min-h-0 flex-col gap-3",
+          variant === "embedded" ? "" : "h-full overflow-hidden",
+        )}
+      >
+        <div className="shrink-0 px-2">
           {sessionLoading ? (
             <Skeleton className="h-4 w-full max-w-[280px] rounded-md" />
           ) : session ? (
@@ -318,7 +360,14 @@ export function ContextPanel({
           )}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1 text-sm leading-relaxed">
+        <div
+          className={cn(
+            "flex flex-col gap-3 text-sm leading-relaxed",
+            variant === "embedded"
+              ? "px-2 pb-4 pt-3"
+              : "min-h-0 flex-1 overflow-y-auto px-1 pb-3 pr-2 pt-2",
+          )}
+        >
           {outputNotice ? (
             <Alert variant="destructive">
               <AlertTitle>Something went wrong</AlertTitle>
@@ -326,8 +375,8 @@ export function ContextPanel({
             </Alert>
           ) : null}
 
-          <Card className="shrink-0 border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
-            <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15 pb-3">
+          <Card className="shrink-0 border border-border/40 bg-card/80 shadow-sm ring-0 backdrop-blur-sm">
+            <CardHeader className="flex flex-col gap-1 border-b border-border/35 bg-muted/5 pb-3">
               <div className="flex flex-row flex-wrap items-start justify-between gap-2">
                 <CardTitle className="text-base font-semibold tracking-tight">Resume</CardTitle>
                 <Button
@@ -350,10 +399,12 @@ export function ContextPanel({
               ) : (
                 <Select value={resumeValue} onValueChange={(v) => void onResumeChange(v ?? NONE)}>
                   <SelectTrigger className="w-full" size="sm">
-                    <SelectValue placeholder="Link a resume" />
+                    <SelectValue placeholder="Choose a resume…">
+                      {(value) => labelResumeSelectValue(value, resumes, NONE)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NONE}>None</SelectItem>
+                    <SelectItem value={NONE}>No resume selected</SelectItem>
                     {resumes.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
                         {r.original_filename?.trim() || `${r.id.slice(0, 8)}…`} (
@@ -369,80 +420,91 @@ export function ContextPanel({
                     Recent
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    {recentResumes.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex flex-row items-center gap-1 rounded-lg border border-border/70 bg-muted/10 pr-1"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => void onResumeChange(r.id)}
-                          className="flex min-w-0 flex-1 flex-row items-center justify-between gap-2 px-2.5 py-2 text-left text-xs hover:bg-muted/20"
+                    {recentResumes.map((r) => {
+                      const isSelected = resumeValue === r.id;
+                      return (
+                        <div
+                          key={r.id}
+                          data-state={isSelected ? "selected" : undefined}
+                          className={cn(
+                            "flex flex-row items-center gap-1 pr-1",
+                            listRowClasses(isSelected),
+                          )}
                         >
-                          <span className="min-w-0 truncate font-mono text-[11px]">{r.id.slice(0, 8)}…</span>
-                          <Badge
-                            variant={resumeValue === r.id ? "default" : "secondary"}
-                            className="shrink-0 text-[10px]"
+                          <button
+                            type="button"
+                            aria-current={isSelected ? "true" : undefined}
+                            onClick={() => void onResumeChange(r.id)}
+                            className="flex min-w-0 flex-1 flex-row items-center justify-between gap-2 px-2.5 py-2 text-left text-xs hover:bg-muted/20"
                           >
-                            {r.parse_pending ? "Parsing…" : r.has_file ? "File" : "No file"}
-                          </Badge>
-                        </button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={!apiReady || !r.has_file || resumeDownloadBusy === r.id}
-                          className="shrink-0 text-muted-foreground hover:text-foreground"
-                          aria-label={`Download resume ${r.id.slice(0, 8)}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            void handleDownloadResume(r);
-                          }}
-                        >
-                          <Download className="size-3.5" strokeWidth={2} />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={!apiReady || r.parsed_json == null}
-                          className="shrink-0 text-muted-foreground hover:text-foreground"
-                          aria-label={`View parsed JSON ${r.id.slice(0, 8)}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setResumeJsonView(r);
-                          }}
-                        >
-                          <Braces className="size-3.5" strokeWidth={2} />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          disabled={!apiReady || isDeletingResume}
-                          className="shrink-0 text-muted-foreground hover:text-destructive"
-                          aria-label={`Delete resume ${r.id.slice(0, 8)}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDeleteResumeError(null);
-                            setPendingDeleteResumeId(r.id);
-                          }}
-                        >
-                          <Trash2 className="size-3.5" strokeWidth={2} />
-                        </Button>
-                      </div>
-                    ))}
+                            <span className="min-w-0 truncate font-mono text-[11px]">{r.id.slice(0, 8)}…</span>
+                            {r.parse_pending ? (
+                              <Badge variant="outline" className="shrink-0 text-[10px]">
+                                Parsing…
+                              </Badge>
+                            ) : !r.has_file ? (
+                              <Badge variant="destructive" className="shrink-0 text-[10px]">
+                                No file
+                              </Badge>
+                            ) : null}
+                          </button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={!apiReady || !r.has_file || resumeDownloadBusy === r.id}
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label={`Download resume ${r.id.slice(0, 8)}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void handleDownloadResume(r);
+                            }}
+                          >
+                            <Download className="size-3.5" strokeWidth={2} />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={!apiReady || r.parsed_json == null}
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label={`View parsed JSON ${r.id.slice(0, 8)}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setResumeJsonView(r);
+                            }}
+                          >
+                            <Braces className="size-3.5" strokeWidth={2} />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={!apiReady || isDeletingResume}
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                            aria-label={`Delete resume ${r.id.slice(0, 8)}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDeleteResumeError(null);
+                              setPendingDeleteResumeId(r.id);
+                            }}
+                          >
+                            <Trash2 className="size-3.5" strokeWidth={2} />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
             </CardContent>
           </Card>
 
-          <Card className="shrink-0 border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
-            <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15 pb-3">
+          <Card className="shrink-0 border border-border/40 bg-card/80 shadow-sm ring-0 backdrop-blur-sm">
+            <CardHeader className="flex flex-col gap-1 border-b border-border/35 bg-muted/5 pb-3">
               <div className="flex flex-row flex-wrap items-start justify-between gap-2">
                 <CardTitle className="text-base font-semibold tracking-tight">Job description</CardTitle>
                 <Button
@@ -463,10 +525,12 @@ export function ContextPanel({
             <CardContent className="flex flex-col gap-3 p-4">
               <Select value={jdValue} onValueChange={(v) => void onJdChange(v ?? JD_NONE)}>
                 <SelectTrigger className="w-full" size="sm">
-                  <SelectValue placeholder="Select a job description" />
+                  <SelectValue placeholder="Choose a job description…">
+                    {(value) => labelJobSelectValue(value, jds, JD_NONE)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={JD_NONE}>None</SelectItem>
+                  <SelectItem value={JD_NONE}>No job description selected</SelectItem>
                   {jds.map((jd) => (
                     <SelectItem key={jd.id} value={jd.id}>
                       {jd.id.slice(0, 8)}… ({new Date(jd.created_at).toLocaleDateString()})
@@ -477,8 +541,8 @@ export function ContextPanel({
             </CardContent>
           </Card>
 
-          <Card className="shrink-0 border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
-            <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15 pb-3">
+          <Card className="shrink-0 border border-border/40 bg-card/80 shadow-sm ring-0 backdrop-blur-sm">
+            <CardHeader className="flex flex-col gap-1 border-b border-border/35 bg-muted/5 pb-3">
               <div className="flex flex-row flex-wrap items-start justify-between gap-2">
                 <CardTitle className="text-base font-semibold tracking-tight">Template</CardTitle>
                 <Button
@@ -503,7 +567,9 @@ export function ContextPanel({
               ) : (
                 <Select value={templateId} onValueChange={(v) => v && setTemplateId(v)}>
                   <SelectTrigger className="w-full" size="sm">
-                    <SelectValue placeholder="Template" />
+                    <SelectValue placeholder="Choose a template…">
+                      {(value) => labelTemplateSelectValue(value, templates)}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {templates.map((t) => (
@@ -517,8 +583,8 @@ export function ContextPanel({
             </CardContent>
           </Card>
 
-          <Card className="shrink-0 border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
-            <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15 pb-3">
+          <Card className="shrink-0 border border-border/40 bg-card/80 shadow-sm ring-0 backdrop-blur-sm">
+            <CardHeader className="flex flex-col gap-1 border-b border-border/35 bg-muted/5 pb-3">
               <CardTitle className="text-base font-semibold tracking-tight">Resume output</CardTitle>
               <CardDescription className="text-xs leading-relaxed">
                 Build a PDF using this chat&apos;s resume, job, and template.
@@ -574,7 +640,7 @@ export function ContextPanel({
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-auto px-6 py-3">
-            <pre className="whitespace-pre-wrap break-words rounded-lg border border-border/80 bg-muted/30 p-3 font-mono text-[11px] leading-relaxed text-foreground">
+            <pre className="whitespace-pre-wrap wrap-break-word rounded-lg border border-border/80 bg-muted/30 p-3 font-mono text-[11px] leading-relaxed text-foreground">
               {resumeJsonView?.parsed_json != null
                 ? JSON.stringify(resumeJsonView.parsed_json, null, 2)
                 : ""}
@@ -656,7 +722,7 @@ export function ContextPanel({
         }}
       >
         <DialogContent showCloseButton className="gap-0 sm:max-w-md">
-          <DialogHeader className="space-y-2 pr-8 text-left">
+          <DialogHeader className="flex flex-col gap-2 pr-8 text-left">
             <DialogTitle className="leading-snug">Delete this resume?</DialogTitle>
             <DialogDescription>
               This removes the resume. If this chat was using it, the selection will clear. This cannot be undone.
@@ -717,6 +783,6 @@ export function ContextPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </aside>
+    </ContextPanelOuter>
   );
 }

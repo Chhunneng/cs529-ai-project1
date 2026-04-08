@@ -74,7 +74,7 @@ async def delete_session_by_id(session: AgentSession, db: AsyncSession) -> bool:
         select(ResumeOutput).where(ResumeOutput.session_id == session.id)
     )
     outputs = out_result.scalars().all()
-    root = Path(settings.artifacts_dir).resolve()
+    root = Path(settings.storage.artifacts_dir).resolve()
     for out in outputs:
         _unlink_if_under_artifacts(out.pdf_path, root)
         _unlink_if_under_artifacts(out.tex_path, root)

@@ -35,12 +35,14 @@ async def patch_agent_session(
     body: SessionPatchRequest,
     db: AsyncSession,
 ) -> AgentSession:
-    if body.selected_resume_id is not None:
+    # Only update fields present in the JSON body so explicit null clears FKs.
+    fields_set = body.model_fields_set
+    if "selected_resume_id" in fields_set:
         session.selected_resume_id = body.selected_resume_id
-    if body.active_jd_id is not None:
+    if "active_jd_id" in fields_set:
         session.active_jd_id = body.active_jd_id
-    if body.state_json is not None:
-        session.state_json = body.state_json
+    if "state_json" in fields_set:
+        session.state_json = body.state_json if body.state_json is not None else {}
     await db.commit()
     await db.refresh(session)
     return session

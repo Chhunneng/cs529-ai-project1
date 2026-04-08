@@ -30,5 +30,12 @@ class Settings(BaseSettings):
     # Max characters of content_text sent to the resume profile extractor (stateless OpenAI call)
     resume_extract_max_input_chars: int = 24000
 
+    # Chat agent (OpenAI Agents SDK): tool limits and run cap
+    agent_chat_max_turns: int = 12
+    agent_resume_overview_max_chars: int = 2500
+    agent_resume_excerpt_max_chars: int = 4000
+    agent_jd_tool_max_chars: int = 8000
+    agent_resume_search_max_scan_chars: int = 50000
+
 
 settings = Settings()  # type: ignore[call-arg]

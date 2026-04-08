@@ -25,25 +25,32 @@ class RenderResumeJob(BaseModel):
     template_id: str
 
 
+class ParseResumeJob(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["parse_resume"] = "parse_resume"
+    resume_id: str
+
+
 _DiscriminatedAgentJob = Annotated[
-    Union[ChatMessageJob, RenderResumeJob], Field(discriminator="type")
+    Union[ChatMessageJob, RenderResumeJob, ParseResumeJob], Field(discriminator="type")
 ]
 
 _job_adapter = TypeAdapter(_DiscriminatedAgentJob)
 
-type AgentJob = ChatMessageJob | RenderResumeJob
+type AgentJob = ChatMessageJob | RenderResumeJob | ParseResumeJob
 
 
-def parse_agent_job(data: object) -> ChatMessageJob | RenderResumeJob:
+def parse_agent_job(data: object) -> ChatMessageJob | RenderResumeJob | ParseResumeJob:
     """Factory: validate dict / parsed JSON into a concrete job model."""
     return _job_adapter.validate_python(data)
 
 
-def serialize_job(job: ChatMessageJob | RenderResumeJob) -> str:
+def serialize_job(job: ChatMessageJob | RenderResumeJob | ParseResumeJob) -> str:
     """Adapter: domain model → Redis wire string."""
     return job.model_dump_json()
 
 
-def deserialize_job(raw: str) -> ChatMessageJob | RenderResumeJob:
+def deserialize_job(raw: str) -> ChatMessageJob | RenderResumeJob | ParseResumeJob:
     """Adapter: Redis wire string → domain model (validates)."""
     return _job_adapter.validate_json(raw)

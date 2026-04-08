@@ -38,6 +38,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       ARTIFACTS_DIR: ${ARTIFACTS_DIR:-/data/artifacts}
+      RESUME_UPLOADS_DIR: ${RESUME_UPLOADS_DIR:-/data/resume-uploads}
       INTERNAL_COMPILE_TOKEN: ${INTERNAL_COMPILE_TOKEN:-}
     depends_on:
       postgres:
@@ -46,6 +47,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data/artifacts:/data/artifacts
+      - ./data/resume-uploads:/data/resume-uploads
     ports:
       - "8000:8000"
     healthcheck:

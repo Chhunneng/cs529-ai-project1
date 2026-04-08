@@ -24,5 +24,11 @@ class Settings(BaseSettings):
     # Shared with worker via volume; PDFs served from absolute paths stored in DB
     artifacts_dir: str = "/data/artifacts"
 
+    resume_uploads_dir: str = "/data/resume-uploads"
+    resume_upload_max_bytes: int = 10 * 1024 * 1024
+
+    # Max characters of content_text sent to the resume profile extractor (stateless OpenAI call)
+    resume_extract_max_input_chars: int = 24000
+
 
 settings = Settings()  # type: ignore[call-arg]

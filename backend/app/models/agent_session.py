@@ -21,3 +21,4 @@ class AgentSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     openai_conversation_id: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
+    previous_response_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

@@ -10,10 +10,10 @@ from app.db.base import import_models
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
-configure_logging(settings.log_level)
+configure_logging(settings.app.log_level)
 import_models()
 
-app = FastAPI(title=settings.app_name)
+app = FastAPI(title=settings.app.app_name)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 

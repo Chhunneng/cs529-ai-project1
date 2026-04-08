@@ -25,7 +25,7 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     # Prefer DATABASE_URL env var to keep Alembic consistent in and out of docker.
-    return os.getenv("DATABASE_URL", settings.database_url)
+    return os.getenv("DATABASE_URL", settings.database.url)
 
 
 def run_migrations_offline() -> None:

@@ -35,7 +35,7 @@ async def create_openai_conversation() -> str:
 
 
 async def delete_openai_conversation_best_effort(conversation_id: str | None) -> None:
-    if not conversation_id or not settings.openai_api_key:
+    if not conversation_id or not settings.openai.api_key:
         return
     try:
         client = async_openai_client()
@@ -60,7 +60,7 @@ async def generate_reply(
     ctx = (context_text or "").strip()
     ctx_block = f"\n\n--- Session context ---\n{ctx}" if ctx else ""
     resp = await client.responses.create(
-        model=settings.openai_model,
+        model=settings.openai.model,
         conversation=conversation_id,
         input=[{"role": "user", "content": user_text + ctx_block}],
     )
@@ -69,4 +69,4 @@ async def generate_reply(
     usage = getattr(resp, "usage", None)
     usage_dict = usage.model_dump() if hasattr(usage, "model_dump") else None
 
-    return OpenAIReply(model=settings.openai_model, reply_text=reply_text.strip(), usage=usage_dict)
+    return OpenAIReply(model=settings.openai.model, reply_text=reply_text.strip(), usage=usage_dict)

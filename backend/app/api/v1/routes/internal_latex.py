@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 def _check_internal_token(x_internal_token: str | None) -> None:
-    expected = settings.internal_compile_token
+    expected = settings.internal.compile_token
     if not expected:
         return
     if x_internal_token != expected:

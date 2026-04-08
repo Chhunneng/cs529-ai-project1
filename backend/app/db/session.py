@@ -6,7 +6,7 @@ from app.core.config import settings
 
 
 def create_engine() -> AsyncEngine:
-    return create_async_engine(settings.database_url, pool_pre_ping=True)
+    return create_async_engine(settings.database.url, pool_pre_ping=True)
 
 
 engine = create_engine()

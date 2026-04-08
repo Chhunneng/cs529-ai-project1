@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
 import { useChatWorkspace } from "@/components/chat/use-chat-workspace";
+import { MobileAppNav } from "@/components/layout/mobile-app-nav";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const {
@@ -46,7 +47,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         newChatError={newChatError}
         onDismissNewChatError={() => setNewChatError(null)}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <MobileAppNav
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={selectSession}
+          onNewChat={handleNewChat}
+          onDeleteSession={(id) => removeSession(id)}
+          onRetryLoadSessions={() => retryLoadSessions()}
+          isChecking={isChecking}
+          isReady={isReady}
+          sessionsLoading={sessionsLoading}
+          sessionsError={sessionsError}
+          newChatError={newChatError}
+          onDismissNewChatError={() => setNewChatError(null)}
+        />
+        {children}
+      </div>
     </div>
   );
 }

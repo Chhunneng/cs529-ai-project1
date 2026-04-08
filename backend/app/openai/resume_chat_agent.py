@@ -54,7 +54,7 @@ _INJECTION_SUBSTRINGS = (
 def ensure_agents_openai_configured() -> None:
     """Point the Agents SDK at the same AsyncOpenAI client as the rest of the app."""
     global _agents_sdk_client_configured
-    if _agents_sdk_client_configured or not settings.openai_api_key:
+    if _agents_sdk_client_configured or not settings.openai.api_key:
         return
     set_default_openai_client(async_openai_client(), use_for_tracing=False)
     _agents_sdk_client_configured = True
@@ -89,7 +89,7 @@ async def get_resume_overview(ctx: RunContextWrapper[ChatToolContext]) -> str:
         return "Selected resume was not found."
     return build_resume_overview_text(
         resume=resume,
-        max_chars=settings.agent_resume_overview_max_chars,
+        max_chars=settings.openai.agent_resume_overview_max_chars,
     )
 
 
@@ -107,12 +107,12 @@ async def get_resume_excerpt(
     resume = await load_resume_row(resume_id=rid)
     if resume is None:
         return "Selected resume was not found."
-    cap = min(max(1, int(max_chars)), settings.agent_resume_excerpt_max_chars)
+    cap = min(max(1, int(max_chars)), settings.openai.agent_resume_excerpt_max_chars)
     return resume_excerpt(
         resume=resume,
         start_char=int(start_char),
         length=cap,
-        max_length=settings.agent_resume_excerpt_max_chars,
+        max_length=settings.openai.agent_resume_excerpt_max_chars,
     )
 
 
@@ -136,7 +136,7 @@ async def search_in_resume(
         needle=needle,
         max_matches=mm,
         context_chars=120,
-        max_scan_chars=settings.agent_resume_search_max_scan_chars,
+        max_scan_chars=settings.openai.agent_resume_search_max_scan_chars,
     )
 
 
@@ -150,7 +150,7 @@ async def get_active_job_description(ctx: RunContextWrapper[ChatToolContext]) ->
     text = await fetch_job_description_excerpt(
         session_id=ctx.context.session_id,
         jd_id=jid,
-        max_chars=settings.agent_jd_tool_max_chars,
+        max_chars=settings.openai.agent_jd_tool_max_chars,
     )
     if text is None:
         return "Active job description was not found for this session."
@@ -238,7 +238,7 @@ def resume_chat_agent() -> Agent[ChatToolContext]:
     return Agent[ChatToolContext](
         name="ResumeAssistant",
         instructions=_RESUME_AGENT_INSTRUCTIONS,
-        model=settings.openai_model,
+        model=settings.openai.model,
         tools=[
             get_resume_overview,
             get_resume_excerpt,
@@ -312,7 +312,7 @@ async def run_resume_chat_agent(
             user_text,
             context=tool_context,
             conversation_id=conversation_id,
-            max_turns=settings.agent_chat_max_turns,
+            max_turns=settings.openai.agent_chat_max_turns,
             hooks=hooks,
             run_config=_resume_chat_run_config(),
             error_handlers=error_handlers,

@@ -216,7 +216,7 @@ async def handle_chat_message_job(job: ChatMessageJob) -> None:
                 tool_context=tool_ctx,
             )
             assistant_text = agent_run.reply_text
-            reply_model = settings.openai_model
+            reply_model = settings.openai.model
             reply_usage = agent_run.usage
             tool_calls = agent_run.tool_calls
 
@@ -266,7 +266,7 @@ async def handle_chat_message_job(job: ChatMessageJob) -> None:
 async def handle_parse_resume_job(job: ParseResumeJob) -> None:
     resume_id = uuid.UUID(job.resume_id)
     log.info("parse_resume_start", resume_id=str(resume_id))
-    if not settings.openai_api_key:
+    if not settings.openai.api_key:
         log.warn("parse_resume_skipped_no_api_key", resume_id=str(resume_id))
         return
 

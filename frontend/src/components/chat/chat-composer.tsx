@@ -48,12 +48,12 @@ export function ChatComposer({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       <div
         className={cn(
-          "flex w-full min-w-0 gap-1.5 rounded-2xl border border-border/90 bg-card px-2 py-2 shadow-sm",
+          "flex w-full min-w-0 gap-1.5 rounded-2xl border border-border/50 bg-card px-2 py-2 shadow-md",
           multiline ? "items-end" : "items-center",
-          "transition-[box-shadow,border-color] focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/25",
+          "transition-[box-shadow,border-color] focus-within:border-ring/40 focus-within:ring-1 focus-within:ring-ring/30",
           disabled && "opacity-50",
         )}
       >
@@ -61,7 +61,7 @@ export function ChatComposer({
           ref={taRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Write a message…"
+          placeholder="Write a message… (⌘ + Enter to send)"
           disabled={disabled}
           rows={1}
           className={cn(
@@ -82,7 +82,7 @@ export function ChatComposer({
           variant="default"
           size="sm"
           disabled={!canSend}
-          className="shrink-0 gap-1.5 rounded-xl font-medium shadow-sm"
+          className="shrink-0 gap-1.5 rounded-2xl font-medium shadow-sm"
           onClick={() => void handleSend()}
         >
           {isSending ? (
@@ -93,17 +93,6 @@ export function ChatComposer({
           {isSending ? "Sending…" : "Send"}
         </Button>
       </div>
-
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        <kbd className="pointer-events-none rounded border border-border bg-muted/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
-          ⌘
-        </kbd>
-        <span className="mx-1">+</span>
-        <kbd className="pointer-events-none rounded border border-border bg-muted/80 px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
-          Enter
-        </kbd>
-        <span className="ml-2">to send</span>
-      </p>
 
       {disabled ? (
         <p className="text-xs text-muted-foreground">Select a chat or wait until the API is ready.</p>

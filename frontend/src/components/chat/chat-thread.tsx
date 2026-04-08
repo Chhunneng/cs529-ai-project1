@@ -1,6 +1,12 @@
 "use client";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/components/chat/types";
 
@@ -12,14 +18,17 @@ export function ChatThread({
   isSending?: boolean;
 }) {
   return (
-    <ScrollArea className="min-h-0 flex-1 rounded-2xl border border-border/70 bg-muted/25 shadow-inner">
-      <div className="flex flex-col gap-4 p-4 md:p-5 md:pr-6">
+    <ScrollArea className="min-h-0 flex-1 bg-transparent">
+      <div className="flex flex-col gap-3 pr-2 pl-0 py-1">
         {messages.length === 0 ? (
-          <div className="flex min-h-[180px] flex-col items-center justify-center px-4 py-12 text-center">
-            <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-              No messages in this session yet. Say hello below to get started.
-            </p>
-          </div>
+          <Empty className="min-h-[160px] border-none bg-transparent py-8">
+            <EmptyHeader>
+              <EmptyTitle className="text-base font-medium tracking-tight">No messages yet</EmptyTitle>
+              <EmptyDescription className="max-w-sm opacity-90">
+                Say hello below to get started with this session.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <>
             {messages.map((m, idx) => (
@@ -29,10 +38,10 @@ export function ChatThread({
               >
                 <div
                   className={cn(
-                    "max-w-[min(100%,42rem)] rounded-2xl px-4 py-3 shadow-sm",
+                    "max-w-[min(100%,42rem)] rounded-2xl px-3.5 py-2.5 shadow-sm",
                     m.role === "user"
-                      ? "bg-primary text-primary-foreground shadow-primary/20"
-                      : "border border-border/80 bg-card text-card-foreground",
+                      ? "bg-primary text-primary-foreground shadow-primary/25"
+                      : "border border-border/50 bg-card text-card-foreground shadow-sm",
                   )}
                 >
                   <div
@@ -48,7 +57,7 @@ export function ChatThread({
             ))}
             {isSending ? (
               <div className="flex justify-start">
-                <div className="max-w-[min(100%,42rem)] rounded-2xl border border-dashed border-border/80 bg-muted/40 px-4 py-3 shadow-sm">
+                <div className="max-w-[min(100%,42rem)] rounded-2xl border border-dashed border-border/50 bg-card/80 px-3.5 py-2.5 shadow-sm">
                   <p className="text-[0.9375rem] leading-[1.65] text-muted-foreground">Thinking…</p>
                 </div>
               </div>

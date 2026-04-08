@@ -57,7 +57,7 @@ async def generate_resume_fill_json(
     user_message = "\n\n".join(user_parts)
 
     resp = await client.responses.create(
-        model=settings.openai_model,
+        model=settings.openai.model,
         input=[
             {
                 "role": "system",

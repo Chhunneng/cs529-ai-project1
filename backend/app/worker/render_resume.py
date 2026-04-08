@@ -176,7 +176,7 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
         template_tex = latex_source.strip()
         tex_body = render_ats_v1(template_tex=template_tex, data=data)
 
-        out_dir = Path(settings.artifacts_dir) / str(output_id)
+        out_dir = Path(settings.storage.artifacts_dir) / str(output_id)
         out_dir.mkdir(parents=True, exist_ok=True)
         tex_path = out_dir / "resume.tex"
         tex_path.write_text(tex_body, encoding="utf-8")

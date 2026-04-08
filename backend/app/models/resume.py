@@ -1,3 +1,4 @@
+from sqlalchemy import String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,6 +10,9 @@ class Resume(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "resumes"
 
     # Phase 1: no auth/users yet
-    openai_file_id: Mapped[str | None] = mapped_column(nullable=True)
+    original_filename: Mapped[str | None] = mapped_column(String, nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    byte_size: Mapped[int | None] = mapped_column(nullable=True)
+    storage_relpath: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     parsed_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-

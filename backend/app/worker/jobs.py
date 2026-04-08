@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select, update
 
+from app.core.config import settings
 from app.db.session import AsyncSessionMaker
 from app.models.agent_run import AgentRun
 from app.models.agent_session import AgentSession
@@ -15,7 +16,8 @@ from app.models.chat_message import ChatMessage
 from app.models.job_description import JobDescription
 from app.models.resume import Resume
 from app.orchestrator.router import decide_next_action
-from app.queue_jobs import ChatMessageJob, RenderResumeJob
+from app.openai.resume_extract import extract_resume_profile_json
+from app.queue_jobs import ChatMessageJob, ParseResumeJob, RenderResumeJob
 from app.openai.client import (
     create_openai_conversation,
     delete_openai_conversation_best_effort,
@@ -138,12 +140,16 @@ def _truncate(text_val: str, limit: int) -> str:
 async def fetch_resume_context_text(*, resume_id: uuid.UUID) -> str | None:
     async with AsyncSessionMaker() as db:
         r = await db.get(Resume, resume_id)
-        if r is None or r.parsed_json is None:
+        if r is None:
             return None
-        try:
-            return _truncate(json.dumps(r.parsed_json, ensure_ascii=False), 6000)
-        except Exception:
-            return None
+        if r.parsed_json is not None:
+            try:
+                return _truncate(json.dumps(r.parsed_json, ensure_ascii=False), 6000)
+            except Exception:
+                pass
+        if r.content_text and r.content_text.strip():
+            return _truncate(r.content_text.strip(), 6000)
+        return None
 
 
 async def fetch_job_description_text(*, session_id: uuid.UUID, jd_id: uuid.UUID) -> str | None:
@@ -305,9 +311,44 @@ async def handle_chat_message_job(job: ChatMessageJob) -> None:
         raise
 
 
-async def handle_job(job: ChatMessageJob | RenderResumeJob) -> None:
+async def handle_parse_resume_job(job: ParseResumeJob) -> None:
+    resume_id = uuid.UUID(job.resume_id)
+    log.info("parse_resume_start", resume_id=str(resume_id))
+    if not settings.openai_api_key:
+        log.warn("parse_resume_skipped_no_api_key", resume_id=str(resume_id))
+        return
+
+    async with AsyncSessionMaker() as db:
+        r = await db.get(Resume, resume_id)
+        if r is None:
+            log.warn("parse_resume_resume_missing", resume_id=str(resume_id))
+            return
+        body = (r.content_text or "").strip()
+        if not body:
+            log.warn("parse_resume_no_content_text", resume_id=str(resume_id))
+            return
+
+    try:
+        parsed = await extract_resume_profile_json(resume_text=body)
+    except Exception:
+        log.exception("parse_resume_failed", resume_id=str(resume_id))
+        return
+
+    async with AsyncSessionMaker() as db:
+        r2 = await db.get(Resume, resume_id)
+        if r2 is None:
+            return
+        r2.parsed_json = parsed
+        await db.commit()
+    log.info("parse_resume_done", resume_id=str(resume_id))
+
+
+async def handle_job(job: ChatMessageJob | RenderResumeJob | ParseResumeJob) -> None:
     if isinstance(job, RenderResumeJob):
         await handle_render_resume(job)
+        return
+    if isinstance(job, ParseResumeJob):
+        await handle_parse_resume_job(job)
         return
     if isinstance(job, ChatMessageJob):
         await handle_chat_message_job(job)

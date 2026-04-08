@@ -1,20 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Braces, Download, Trash2 } from "lucide-react";
 
 import {
   activateJobDescription,
   createJobDescription,
-  createResume,
   createResumeOutput,
   deleteResume,
+  downloadResumeFile,
   getResumeOutput,
   getSession,
   listJobDescriptions,
   listResumes,
   listResumeTemplates,
   patchSession,
+  uploadResume,
   resumeOutputPdfUrl,
   type JobDescriptionResponse,
   type ResumeListItem,
@@ -35,7 +36,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -77,7 +77,11 @@ export function ContextPanel({
   const [deleteResumeError, setDeleteResumeError] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [newFilename, setNewFilename] = useState("resume.pdf");
+  const resumeFileRef = useRef<HTMLInputElement>(null);
+  const [resumePickLabel, setResumePickLabel] = useState<string | null>(null);
+  const [resumeUploadBusy, setResumeUploadBusy] = useState(false);
+  const [resumeDownloadBusy, setResumeDownloadBusy] = useState<string | null>(null);
+  const [resumeJsonView, setResumeJsonView] = useState<ResumeListItem | null>(null);
   const [jdOpen, setJdOpen] = useState(false);
   const [jdDraft, setJdDraft] = useState("");
 
@@ -178,15 +182,37 @@ export function ContextPanel({
     }
   }
 
-  async function handleAddResume() {
-    if (!apiReady || !newFilename.trim()) return;
+  async function handleUploadResume() {
+    const f = resumeFileRef.current?.files?.[0];
+    if (!apiReady || !f) {
+      setOutputNotice("Choose a PDF, TXT, or DOCX file.");
+      return;
+    }
+    setResumeUploadBusy(true);
+    setOutputNotice(null);
     try {
-      await createResume(newFilename.trim());
+      await uploadResume(f);
       setAddOpen(false);
-      setNewFilename("resume.pdf");
+      setResumePickLabel(null);
+      if (resumeFileRef.current) resumeFileRef.current.value = "";
       await loadLists();
-    } catch {
-      setOutputNotice("Could not create resume.");
+    } catch (e) {
+      setOutputNotice(e instanceof Error ? e.message : "Could not upload resume.");
+    } finally {
+      setResumeUploadBusy(false);
+    }
+  }
+
+  async function handleDownloadResume(r: ResumeListItem) {
+    if (!r.has_file || !apiReady) return;
+    setResumeDownloadBusy(r.id);
+    setOutputNotice(null);
+    try {
+      await downloadResumeFile(r.id, r.original_filename || "resume");
+    } catch (e) {
+      setOutputNotice(e instanceof Error ? e.message : "Could not download resume.");
+    } finally {
+      setResumeDownloadBusy(null);
     }
   }
 
@@ -324,7 +350,7 @@ export function ContextPanel({
                   type="button"
                   onClick={() => setAddOpen(true)}
                 >
-                  New resume
+                  Upload resume
                 </Button>
               </div>
               <CardDescription className="text-xs leading-relaxed">
@@ -343,7 +369,8 @@ export function ContextPanel({
                     <SelectItem value={NONE}>None</SelectItem>
                     {resumes.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
-                        {r.id.slice(0, 8)}… ({new Date(r.created_at).toLocaleDateString()})
+                        {r.original_filename?.trim() || `${r.id.slice(0, 8)}…`} (
+                        {new Date(r.created_at).toLocaleDateString()})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -370,9 +397,39 @@ export function ContextPanel({
                             variant={resumeValue === r.id ? "default" : "secondary"}
                             className="shrink-0 text-[10px]"
                           >
-                            {r.openai_file_id ? "File" : "Draft"}
+                            {r.parse_pending ? "Parsing…" : r.has_file ? "File" : "No file"}
                           </Badge>
                         </button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={!apiReady || !r.has_file || resumeDownloadBusy === r.id}
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          aria-label={`Download resume ${r.id.slice(0, 8)}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleDownloadResume(r);
+                          }}
+                        >
+                          <Download className="size-3.5" strokeWidth={2} />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={!apiReady || r.parsed_json == null}
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          aria-label={`View parsed JSON ${r.id.slice(0, 8)}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setResumeJsonView(r);
+                          }}
+                        >
+                          <Braces className="size-3.5" strokeWidth={2} />
+                        </Button>
                         <Button
                           type="button"
                           variant="ghost"
@@ -534,26 +591,83 @@ export function ContextPanel({
         onTemplatesChanged={() => void loadLists()}
       />
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New resume</DialogTitle>
-            <DialogDescription>
-              Enter a filename for this draft. You can link it to this chat after it is created.
+      <Dialog open={resumeJsonView != null} onOpenChange={(open) => !open && setResumeJsonView(null)}>
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col gap-0 p-0 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 border-b border-border/70 px-6 py-4 text-left">
+            <DialogTitle>Parsed resume data</DialogTitle>
+            <DialogDescription className="font-mono text-xs">
+              {resumeJsonView?.original_filename ?? "Resume"} · {resumeJsonView?.id.slice(0, 8)}…
             </DialogDescription>
           </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto px-6 py-3">
+            <pre className="whitespace-pre-wrap break-words rounded-lg border border-border/80 bg-muted/30 p-3 font-mono text-[11px] leading-relaxed text-foreground">
+              {resumeJsonView?.parsed_json != null
+                ? JSON.stringify(resumeJsonView.parsed_json, null, 2)
+                : ""}
+            </pre>
+          </div>
+          <DialogFooter className="shrink-0 border-t border-border/70 px-6 py-3 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setResumeJsonView(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) {
+            setResumePickLabel(null);
+            if (resumeFileRef.current) resumeFileRef.current.value = "";
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload resume</DialogTitle>
+            <DialogDescription>
+              PDF, TXT, or DOCX. After upload you can link it to this chat from the list.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            ref={resumeFileRef}
+            type="file"
+            accept=".pdf,.txt,.docx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              setResumePickLabel(file ? file.name : null);
+            }}
+          />
           <div className="flex flex-col gap-2">
-            <Input
-              value={newFilename}
-              onChange={(e) => setNewFilename(e.target.value)}
-              placeholder="resume.pdf"
-            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!apiReady || resumeUploadBusy}
+              onClick={() => resumeFileRef.current?.click()}
+            >
+              {resumePickLabel ? "Change file" : "Choose file"}
+            </Button>
+            {resumePickLabel ? (
+              <p className="text-xs text-muted-foreground">
+                Selected: <span className="text-foreground">{resumePickLabel}</span>
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">No file selected.</p>
+            )}
           </div>
           <DialogFooter className="flex flex-row gap-2 sm:justify-end">
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
+            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={resumeUploadBusy}>
               Cancel
             </Button>
-            <Button onClick={() => void handleAddResume()}>Create</Button>
+            <Button
+              disabled={!apiReady || resumeUploadBusy || !resumePickLabel}
+              onClick={() => void handleUploadResume()}
+            >
+              {resumeUploadBusy ? "Uploading…" : "Upload"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

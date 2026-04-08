@@ -90,12 +90,27 @@ async def _fetch_render_context(output_id: uuid.UUID) -> dict[str, Any]:
         }
 
 
+def _truncate_resume_for_fill(text: str, limit: int = 6000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "…"
+
+
 async def _fetch_resume_text(resume_id: uuid.UUID) -> str | None:
     async with AsyncSessionMaker() as db:
         r = await db.get(Resume, resume_id)
-        if r is None or r.parsed_json is None:
+        if r is None:
             return None
-        return json.dumps(r.parsed_json, ensure_ascii=False)
+        if r.parsed_json is not None:
+            try:
+                return _truncate_resume_for_fill(
+                    json.dumps(r.parsed_json, ensure_ascii=False)
+                )
+            except Exception:
+                pass
+        if r.content_text and r.content_text.strip():
+            return _truncate_resume_for_fill(r.content_text.strip())
+        return None
 
 
 async def _fetch_jd_text(session_id: uuid.UUID, jd_id: uuid.UUID) -> str | None:

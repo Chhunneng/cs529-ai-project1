@@ -13,7 +13,8 @@ log = structlog.get_logger()
 
 RESUME_ASSISTANT_SYSTEM_MESSAGE = (
     "You are a helpful resume assistant.\n"
-    "Use any provided session context (selected resume, active job description) when relevant.\n"
+    "You can use tools to load the user's selected resume and active job description when needed; "
+    "do not assume long documents are pasted into each message.\n"
     "Keep replies short in Phase 1."
 )
 

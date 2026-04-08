@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -18,11 +17,12 @@ from app.models.resume import Resume
 from app.orchestrator.router import decide_next_action
 from app.openai.resume_extract import extract_resume_profile_json
 from app.queue_jobs import ChatMessageJob, ParseResumeJob, RenderResumeJob
+from app.openai.chat_tool_context import ChatToolContext
 from app.openai.client import (
     create_openai_conversation,
     delete_openai_conversation_best_effort,
-    generate_reply,
 )
+from app.openai.resume_chat_agent import run_resume_chat_agent
 from app.openai.intent import classify_intent
 from app.services.chat_reply_notify import publish_chat_reply
 from app.worker.render_resume import handle_render_resume
@@ -66,7 +66,9 @@ async def fetch_user_message_text(*, message_id: uuid.UUID) -> tuple[uuid.UUID, 
         return msg.session_id, msg.message
 
 
-async def insert_assistant_message(*, session_id: uuid.UUID, message: str) -> uuid.UUID:
+async def insert_assistant_message(
+    *, session_id: uuid.UUID, message: str, tool_used: str | None = "openai.agents.Runner"
+) -> uuid.UUID:
     new_id = uuid.uuid4()
     async with AsyncSessionMaker() as db:
         db.add(
@@ -75,7 +77,7 @@ async def insert_assistant_message(*, session_id: uuid.UUID, message: str) -> uu
                 session_id=session_id,
                 role="assistant",
                 message=message,
-                tool_used="openai.responses.create",
+                tool_used=tool_used,
             )
         )
         await db.commit()
@@ -129,56 +131,6 @@ async def ensure_openai_conversation_id(
         await delete_openai_conversation_best_effort(new_id)
         return resolved
     raise RuntimeError("openai_conversation_id missing after concurrent create")
-
-
-def _truncate(text_val: str, limit: int) -> str:
-    if len(text_val) <= limit:
-        return text_val
-    return text_val[:limit].rstrip() + "…"
-
-
-async def fetch_resume_context_text(*, resume_id: uuid.UUID) -> str | None:
-    async with AsyncSessionMaker() as db:
-        r = await db.get(Resume, resume_id)
-        if r is None:
-            return None
-        if r.parsed_json is not None:
-            try:
-                return _truncate(json.dumps(r.parsed_json, ensure_ascii=False), 6000)
-            except Exception:
-                pass
-        if r.content_text and r.content_text.strip():
-            return _truncate(r.content_text.strip(), 6000)
-        return None
-
-
-async def fetch_job_description_text(*, session_id: uuid.UUID, jd_id: uuid.UUID) -> str | None:
-    async with AsyncSessionMaker() as db:
-        jd = await db.scalar(
-            select(JobDescription).where(
-                JobDescription.id == jd_id, JobDescription.session_id == session_id
-            )
-        )
-        if jd is None:
-            return None
-        return _truncate(str(jd.raw_text), 6000)
-
-
-def build_session_context_block(
-    *,
-    selected_resume_id: uuid.UUID | None,
-    active_jd_id: uuid.UUID | None,
-    resume_text: str | None,
-    jd_text: str | None,
-) -> str:
-    parts: list[str] = []
-    parts.append(f"selected_resume_id: {selected_resume_id or 'null'}")
-    parts.append(f"active_jd_id: {active_jd_id or 'null'}")
-    if resume_text:
-        parts.append("--- Selected resume (structured JSON, may be partial) ---\n" + resume_text)
-    if jd_text:
-        parts.append("--- Active job description ---\n" + jd_text)
-    return "\n".join(parts)
 
 
 async def create_job_description_and_activate(
@@ -248,36 +200,35 @@ async def handle_chat_message_job(job: ChatMessageJob) -> None:
             )
             reply_model = "internal"
             reply_usage = None
+            tool_calls: list[str] = []
         else:
-            resume_text = (
-                await fetch_resume_context_text(resume_id=selected_resume_id)
-                if selected_resume_id
-                else None
-            )
-            jd_text = (
-                await fetch_job_description_text(session_id=session_id, jd_id=active_jd_id)
-                if active_jd_id
-                else None
-            )
-            ctx = build_session_context_block(
-                selected_resume_id=selected_resume_id,
-                active_jd_id=active_jd_id,
-                resume_text=resume_text,
-                jd_text=jd_text,
-            )
             conv_id = await ensure_openai_conversation_id(
                 session_id=session_id, existing=openai_conversation_existing
             )
-            reply = await generate_reply(
+            tool_ctx = ChatToolContext(
+                session_id=session_id,
+                selected_resume_id=selected_resume_id,
+                active_jd_id=active_jd_id,
+            )
+            agent_run = await run_resume_chat_agent(
                 conversation_id=conv_id,
                 user_text=user_text,
-                context_text=ctx,
+                tool_context=tool_ctx,
             )
-            assistant_text = reply.reply_text or "Thanks — I’ve received your message."
-            reply_model = reply.model
-            reply_usage = reply.usage
+            assistant_text = agent_run.reply_text
+            reply_model = settings.openai_model
+            reply_usage = agent_run.usage
+            tool_calls = agent_run.tool_calls
 
-        assistant_id = await insert_assistant_message(session_id=session_id, message=assistant_text)
+        assistant_id = await insert_assistant_message(
+            session_id=session_id,
+            message=assistant_text,
+            tool_used=(
+                "internal.jd_ingest"
+                if intent.intent == "job_description"
+                else "openai.agents.Runner"
+            ),
+        )
         await publish_chat_reply(
             user_message_id=message_id,
             session_id=session_id,
@@ -292,6 +243,7 @@ async def handle_chat_message_job(job: ChatMessageJob) -> None:
                 "model": reply_model,
                 "reply_text": assistant_text,
                 "usage": reply_usage,
+                "tool_calls": tool_calls,
                 "intent": {
                     "label": intent.intent,
                     "confidence": intent.confidence,

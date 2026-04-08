@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Braces, Download, Trash2 } from "lucide-react";
 
 import {
-  activateJobDescription,
   createJobDescription,
   createResumeOutput,
   deleteResume,
@@ -252,18 +251,6 @@ export function ContextPanel({
     }
   }
 
-  async function handleActivateJd(jdId: string) {
-    if (!apiReady || !sessionId) return;
-    try {
-      await activateJobDescription({ session_id: sessionId, job_description_id: jdId });
-      setJdValue(jdId);
-      const s = await getSession(sessionId);
-      setSession(s);
-    } catch (e) {
-      setOutputNotice(e instanceof Error ? e.message : "Could not activate job description.");
-    }
-  }
-
   async function handleGeneratePdf() {
     if (!sessionId || !apiReady || !templateId) return;
     setOutputBusy(true);
@@ -456,16 +443,8 @@ export function ContextPanel({
 
           <Card className="shrink-0 border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
             <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15 pb-3">
-              <CardTitle className="text-base font-semibold tracking-tight">Job description</CardTitle>
-              <CardDescription className="text-xs leading-relaxed">
-                Paste job text or pick one to use for tailoring and PDF generation.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 p-4">
-              <div className="flex flex-row flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Active
-                </span>
+              <div className="flex flex-row flex-wrap items-start justify-between gap-2">
+                <CardTitle className="text-base font-semibold tracking-tight">Job description</CardTitle>
                 <Button
                   variant="outline"
                   size="sm"
@@ -476,6 +455,12 @@ export function ContextPanel({
                   Paste job
                 </Button>
               </div>
+              <CardDescription className="text-xs leading-relaxed">
+                Choose which saved job is linked to this chat (or None so the assistant does not use a
+                job description). Paste job saves a new one and selects it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 p-4">
               <Select value={jdValue} onValueChange={(v) => void onJdChange(v ?? JD_NONE)}>
                 <SelectTrigger className="w-full" size="sm">
                   <SelectValue placeholder="Select a job description" />
@@ -489,17 +474,6 @@ export function ContextPanel({
                   ))}
                 </SelectContent>
               </Select>
-              {jdValue !== JD_NONE ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={!apiReady || !sessionId}
-                  type="button"
-                  onClick={() => void handleActivateJd(jdValue)}
-                >
-                  Set active
-                </Button>
-              ) : null}
             </CardContent>
           </Card>
 

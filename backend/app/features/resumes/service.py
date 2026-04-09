@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-import uuid
-from sqlalchemy import select
 
-from app.db.session import AsyncSessionMaker
-from app.models.job_description import JobDescription
 from app.models.resume import Resume
 
 
@@ -14,16 +10,6 @@ def _clip(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "…"
-
-
-async def load_resume_row(*, resume_id: uuid.UUID) -> Resume | None:
-    async with AsyncSessionMaker() as db:
-        return await db.get(Resume, resume_id)
-
-
-async def load_job_description_row(*, jd_id: uuid.UUID) -> JobDescription | None:
-    async with AsyncSessionMaker() as db:
-        return await db.scalar(select(JobDescription).where(JobDescription.id == jd_id))
 
 
 def resume_source_text(resume: Resume) -> str:
@@ -126,12 +112,3 @@ def search_resume_text(
         parts.append(f"Match {i} around char {a}: …{snippet}…")
     return note + "\n".join(parts)
 
-
-async def fetch_job_description_excerpt(*, jd_id: uuid.UUID, max_chars: int) -> str | None:
-    jd = await load_job_description_row(jd_id=jd_id)
-    if jd is None:
-        return None
-    raw = str(jd.raw_text or "").strip()
-    if not raw:
-        return "(Job description record is empty.)"
-    return _clip(raw, max_chars)

@@ -9,6 +9,10 @@ Chat-first AI Resume Agent platform scaffold:
 
 ## Architecture (short)
 
+For a **layered view, feature map, and diagrams**, see [backend/docs/ARCHITECTURE.md](backend/docs/ARCHITECTURE.md).
+
+**Next milestone (temporary handoff):** [backend/docs/NEXT_REFACTOR_PDF_AGENT.md](backend/docs/NEXT_REFACTOR_PDF_AGENT.md) describes the planned PDF-first agent chat direction. **When that refactor is shipped, delete that file and remove this bullet.**
+
 - The **browser** only talks to the **backend** (FastAPI).
 - Chat: backend saves the user message and **enqueues** a job in **Redis**; the **worker** consumes it, calls **OpenAI**, saves the assistant message in Postgres, then **PUBLISH**es on Redis so the API can push the reply over **SSE**.
 - The browser opens **`GET /api/v1/sessions/{id}/messages/assistant-stream?user_message_id=...`** (EventSource) after **`POST .../messages`**; keep **`NEXT_PUBLIC_API_BASE_URL`** pointed at the backend and ensure **CORS** allows your frontend origin (already set for localhost dev).

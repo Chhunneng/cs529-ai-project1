@@ -15,7 +15,7 @@ from app.models.resume import Resume
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
 from app.queue_jobs import RenderResumeJob
-from app.worker.latex_client import compile_tex_to_pdf
+from app.features.latex.service import compile_tex_to_pdf
 from app.openai.resume_fill import generate_resume_fill_json
 from app.worker.resume_fill_models import ResumeFillAtsV1
 from app.worker.tex_renderer import render_ats_v1

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.worker.latex_client import compile_tex_to_pdf
+from app.features.latex.service import compile_tex_to_pdf
 
 
 async def build_template_preview_pdf(*, latex_source: str) -> bytes:

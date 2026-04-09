@@ -22,14 +22,14 @@ from agents.run_error_handlers import (
 )
 
 from app.core.config import settings
-from app.openai._sdk import async_openai_client
-from app.openai.chat_context_service import (
+from app.features.job_descriptions.service import fetch_job_description_excerpt
+from app.features.resumes.repo import load_resume_row
+from app.features.resumes.service import (
     build_resume_overview_text,
-    fetch_job_description_excerpt,
-    load_resume_row,
     resume_excerpt,
     search_resume_text,
 )
+from app.openai._sdk import async_openai_client
 from app.openai.chat_tool_context import ChatToolContext
 
 log = structlog.get_logger()

@@ -1,56 +1,9 @@
-import uuid
-from pathlib import Path
+"""
+Compatibility wrapper.
 
+Routes moved to `app.features.resume_outputs.api`.
+"""
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.features.resume_outputs.api import router
 
-from app.api.v1.deps import get_resume_output_or_404, get_session_or_404
-from app.db.session import get_db_session
-from app.models.resume_output import ResumeOutput
-from app.models.agent_session import AgentSession
-from app.schemas.resume_output import ResumeOutputCreateBody, ResumeOutputResponse
-from app.services.resume_output_jobs import create_resume_output_and_enqueue
-
-router = APIRouter(tags=["resume-outputs"])
-
-
-@router.post(
-    "/sessions/{session_id}/resume-outputs",
-    response_model=ResumeOutputResponse,
-    status_code=202,
-)
-async def create_resume_output(
-    body: ResumeOutputCreateBody,
-    session: AgentSession = Depends(get_session_or_404),
-    db: AsyncSession = Depends(get_db_session),
-) -> ResumeOutputResponse:
-    resume_output = await create_resume_output_and_enqueue(
-        db,
-        session=session,
-        template_id=body.template_id,
-        source_resume_id=body.source_resume_id,
-        job_description_id=body.job_description_id,
-    )
-    return resume_output
-
-
-@router.get("/resume-outputs/{output_id}", response_model=ResumeOutputResponse)
-async def get_resume_output(
-    resume_output: ResumeOutput = Depends(get_resume_output_or_404),
-) -> ResumeOutputResponse:
-    return resume_output
-
-
-@router.get("/resume-outputs/{output_id}/pdf")
-async def download_resume_pdf(
-    resume_output: ResumeOutput = Depends(get_resume_output_or_404),
-) -> FileResponse:
-    if not resume_output.pdf_path:
-        raise HTTPException(status_code=404, detail="PDF not ready")
-    path = Path(resume_output.pdf_path)
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="PDF file missing")
-    return FileResponse(path, media_type="application/pdf", filename=f"resume-{resume_output.id}.pdf")
+__all__ = ["router"]

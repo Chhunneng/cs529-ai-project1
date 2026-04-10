@@ -41,6 +41,8 @@ export function VirtualList<T>({
         {virtualizer.getVirtualItems().map((vi) => (
           <div
             key={vi.key}
+            data-index={vi.index}
+            ref={virtualizer.measureElement}
             className="absolute top-0 left-0 w-full"
             style={{ transform: `translateY(${vi.start}px)` }}
           >

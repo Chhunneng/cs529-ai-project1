@@ -344,11 +344,11 @@ export function JobDescriptionsPage() {
                 </EmptyHeader>
               </Empty>
             ) : (
-              <VirtualList items={displayedJds} estimateSize={108} maxHeight="min(65vh,560px)">
+              <VirtualList items={displayedJds} estimateSize={76} maxHeight="min(65vh,560px)">
                 {(jd) => {
                   const isActive = activeJdId === jd.id;
                   return (
-                    <div className="px-0.5 pb-2">
+                    <div className="px-0.5 pb-1">
                       <div
                         role="row"
                         data-state={isActive ? "selected" : undefined}

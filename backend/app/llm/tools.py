@@ -6,7 +6,7 @@ from app.features.resumes.repositories import load_resume_row
 from app.features.resumes.service import build_resume_overview_text, resume_excerpt, search_resume_text
 from app.features.job_descriptions.service import fetch_job_description_excerpt
 from app.features.latex.service import compile_latex_to_pdf
-from app.llm.context import ResumeAgentContext, ToolTraceContext
+from app.llm.context import JobDescriptionAgentContext, ResumeAgentContext, ToolTraceContext
 from app.core.config import settings
 from app.db.session import AsyncSessionMaker
 from app.models import ResumeTemplate
@@ -100,7 +100,7 @@ async def search_in_resume(
 @function_tool(
     is_enabled=lambda ctx, _agent: ctx.context.job_description_id is not None,
 )
-async def get_active_job_description(ctx: RunContextWrapper[ResumeAgentContext]) -> str:
+async def get_active_job_description(ctx: RunContextWrapper[JobDescriptionAgentContext]) -> str:
     """Load the full active job description text for this session.
 
     When to call: Use this when you need to understand the full job description before

@@ -2,7 +2,7 @@
 
 PDF-first AI Resume Agent platform scaffold:
 
-- **frontend**: Next.js + shadcn/ui — split-pane **resume PDF preview** and chat; assistant replies arrive via **SSE** after each `**POST .../turns**`
+- **frontend**: Next.js + shadcn/ui — split-pane **resume PDF preview** and chat; assistant replies arrive via **SSE** after each `**POST .../messages**`
 - **backend**: FastAPI + async SQLAlchemy + Alembic + structlog — includes `**pdflatex`** for resume PDF compilation (internal HTTP endpoint). The `**worker**` runs `**python -m app.worker.runner**` (Redis queue: `**resume_pdf_generation**`, parse resume, render resume output).
 - **postgres**: persistence (Alembic baseline `**0001_baseline_pdf_first_chat**`; reset DB when upgrading from older schemas)
 - **redis**: job queue (`queue:agent-jobs`) and **pub/sub** (`chat:reply:{user_message_id}`) so the worker can notify the API when an assistant message is saved
@@ -13,7 +13,7 @@ For a **layered view, feature map, and diagrams**, see [backend/docs/ARCHITECTUR
 
 - The **browser** only talks to the **backend** (FastAPI).
 - Chat turn: backend saves the user message and **enqueues** `**resume_pdf_generation**` in **Redis**; the **worker** runs the **OpenAI Agents** flow with **SQLAlchemy-backed session memory**, compiles LaTeX to PDF when possible, saves the assistant message (and optional **pdf artifact**), then **PUBLISH**es on Redis for **SSE**.
-- The browser opens `**GET /api/v1/sessions/{id}/messages/assistant-stream?user_message_id=...`** (EventSource) after `**POST .../turns**`; keep `**NEXT_PUBLIC_API_BASE_URL**` pointed at the backend and ensure **CORS** allows your frontend origin (already set for localhost dev).
+- The browser opens `**GET /api/v1/sessions/{id}/messages/assistant-stream?user_message_id=...`** (EventSource) after `**POST .../messages**`; keep `**NEXT_PUBLIC_API_BASE_URL**` pointed at the backend and ensure **CORS** allows your frontend origin (already set for localhost dev).
 - For assistant replies to appear, `**OPENAI_API_KEY`** must be set for the **worker**, and the **worker** must be running **with access to the same Redis and Postgres** as the API.
 - If you put **nginx** (or another proxy) in front of the API, disable buffering for SSE (`X-Accel-Buffering: no` is already set) and set **proxy read timeout** high enough (e.g. ≥ 120s) so the stream is not cut off while waiting for the worker.
 
@@ -60,7 +60,7 @@ If you still have an older `.env` with `LATEX_SERVICE_URL=http://latex:8090`, up
 
 - **Create session**: `POST /api/v1/sessions` (empty body) → `{ "id": "<uuid>" }`
 - **List messages**: `GET /api/v1/sessions/{session_id}/messages` (includes `content`, `pdf_artifact_id`, `pdf_download_url` when present)
-- **Send turn**: `POST /api/v1/sessions/{session_id}/turns` with JSON `{ "content": "...", "resume_template_id"?: null, "resume_id"?: null, "job_description_id"?: null }` → returns the **user** message row (includes `id`).
+- **Send message**: `POST /api/v1/sessions/{session_id}/messages` with JSON `{ "content": "...", "resume_template_id"?: null, "resume_id"?: null, "job_description_id"?: null }` → returns the **user** message row (includes `id`).
 - **Delete message**: `DELETE /api/v1/sessions/{session_id}/messages/{message_id}` (trims OpenAI Agents SDK rows from the same cutoff time)
 - **Download chat PDF**: `GET /api/v1/sessions/{session_id}/pdf-artifacts/{pdf_artifact_id}/file`
 - **Assistant reply stream (SSE)**: `GET /api/v1/sessions/{session_id}/messages/assistant-stream?user_message_id=<uuid>` — one `message` event with JSON (`type`: `assistant` | `timeout` | `error`), then the connection closes.

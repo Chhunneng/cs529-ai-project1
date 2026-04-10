@@ -35,8 +35,13 @@ export type ChatWorkspaceValue = {
   selectSession: (id: string) => void;
   createNewChat: () => Promise<void>;
   removeSession: (id: string) => Promise<void>;
+  /** Merge a session row from getSession/patch so chat sees up-to-date link IDs. */
+  upsertSession: (session: SessionResponse) => void;
   retryConnection: () => void;
   retryLoadSessions: () => void;
+  loadMoreSessions: () => Promise<void>;
+  sessionsTotal: number;
+  sessionsLoadingMore: boolean;
   sessionsLoading: boolean;
   sessionsError: string | null;
   isOffline: boolean;
@@ -49,16 +54,22 @@ const ChatWorkspaceContext = createContext<ChatWorkspaceValue | null>(null);
 function useChatWorkspaceState(): ChatWorkspaceValue {
   const [connection, setConnection] = useState<ConnectionStatus>("checking");
   const [sessions, setSessions] = useState<SessionResponse[]>([]);
+  const [sessionsTotal, setSessionsTotal] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsLoadingMore, setSessionsLoadingMore] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
+
+  const SESSION_PAGE = 100;
 
   const refreshSessions = useCallback(async (focusId?: string | null) => {
     setSessionsError(null);
     setSessionsLoading(true);
     try {
-      const rows = await listSessions();
-      setSessions(rows);
+      const page = await listSessions({ limit: SESSION_PAGE, offset: 0 });
+      setSessions(page.items);
+      setSessionsTotal(page.total);
+      const rows = page.items;
       const ids = rows.map((r) => String(r.id));
       const saved = readActive();
       const next: string | null =
@@ -131,6 +142,38 @@ function useChatWorkspaceState(): ChatWorkspaceValue {
     pingBackend().then((ok) => setConnection(ok ? "ready" : "offline"));
   }, []);
 
+  const loadMoreSessions = useCallback(async () => {
+    if (connection !== "ready" || sessionsLoading || sessionsLoadingMore) return;
+    if (sessions.length >= sessionsTotal) return;
+    setSessionsLoadingMore(true);
+    try {
+      const next = await listSessions({ limit: SESSION_PAGE, offset: sessions.length });
+      setSessions((prev) => [...prev, ...next.items]);
+      setSessionsTotal(next.total);
+    } catch {
+      /* ignore */
+    } finally {
+      setSessionsLoadingMore(false);
+    }
+  }, [
+    connection,
+    sessions.length,
+    sessionsLoading,
+    sessionsLoadingMore,
+    sessionsTotal,
+  ]);
+
+  const upsertSession = useCallback((session: SessionResponse) => {
+    const id = String(session.id);
+    setSessions((prev) => {
+      const idx = prev.findIndex((x) => String(x.id) === id);
+      if (idx === -1) return [...prev, session];
+      const next = [...prev];
+      next[idx] = session;
+      return next;
+    });
+  }, []);
+
   return {
     connection,
     sessions,
@@ -138,8 +181,12 @@ function useChatWorkspaceState(): ChatWorkspaceValue {
     selectSession,
     createNewChat,
     removeSession,
+    upsertSession,
     retryConnection,
     retryLoadSessions: () => void refreshSessions().catch(() => undefined),
+    loadMoreSessions,
+    sessionsTotal,
+    sessionsLoadingMore,
     sessionsLoading,
     sessionsError,
     isOffline: connection === "offline",

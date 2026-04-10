@@ -40,7 +40,16 @@ services:
       - sh
       - -c
       - |
-        if [ ! -f node_modules/.bin/next ]; then npm ci; fi
+        set -e
+        # Named volume can keep stale node_modules after package.json / lockfile changes.
+        HASH_FILE=node_modules/.docker-install-hash
+        NEW_HASH=$$(cat package-lock.json package.json 2>/dev/null | sha256sum | awk '{print $$1}')
+        OLD_HASH=$$(cat "$$HASH_FILE" 2>/dev/null || echo "")
+        if [ ! -f node_modules/.bin/next ] || [ "$$NEW_HASH" != "$$OLD_HASH" ]; then
+          npm ci
+          mkdir -p node_modules
+          echo "$$NEW_HASH" > "$$HASH_FILE"
+        fi
         exec npm run dev -- --hostname 0.0.0.0 --port 3000
 
 volumes:

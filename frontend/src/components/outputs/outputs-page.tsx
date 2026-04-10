@@ -20,30 +20,24 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableResourceCombobox } from "@/components/ui/searchable-resource-combobox";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  SELECT_NONE as NONE,
-  labelResumeSelectValue,
-  labelSessionSelectValue,
-  labelTemplateSelectValue,
-} from "@/lib/select-display";
+import { SELECT_NONE as NONE } from "@/lib/select-display";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const PICK = 150;
+
 export function OutputsPage() {
   const [sessions, setSessions] = useState<SessionResponse[]>([]);
+  const [sessionsTotal, setSessionsTotal] = useState(0);
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
+  const [resumesTotal, setResumesTotal] = useState(0);
   const [templates, setTemplates] = useState<ResumeTemplateListItem[]>([]);
+  const [templatesTotal, setTemplatesTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -55,16 +49,55 @@ export function OutputsPage() {
   const [busy, setBusy] = useState(false);
   const [lastOutput, setLastOutput] = useState<ResumeOutputResponse | null>(null);
 
+  const loadResumesPicker = useCallback(async (q: string) => {
+    try {
+      const r = await listResumes({
+        limit: PICK,
+        offset: 0,
+        ...(q.trim() ? { q: q.trim() } : {}),
+      });
+      setResumes(r.items);
+      setResumesTotal(r.total);
+    } catch {
+      /* keep */
+    }
+  }, []);
+
+  const loadTemplatesPicker = useCallback(async (q: string) => {
+    try {
+      const t = await listResumeTemplates({
+        limit: PICK,
+        offset: 0,
+        ...(q.trim() ? { q: q.trim() } : {}),
+      });
+      setTemplates(t.items);
+      setTemplatesTotal(t.total);
+    } catch {
+      /* keep */
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     setNotice(null);
     setLoading(true);
     try {
-      const [s, r, t] = await Promise.all([listSessions(), listResumes(), listResumeTemplates()]);
-      setSessions(s);
-      setResumes(r);
-      setTemplates(t);
-      setSessionId((prev) => (prev !== NONE ? prev : (s[0]?.id ?? NONE)));
-      setTemplateId((prev) => (prev !== NONE ? prev : (t[0]?.id ?? NONE)));
+      const [s, r, t] = await Promise.all([
+        listSessions({ limit: PICK, offset: 0 }),
+        listResumes({ limit: PICK, offset: 0 }),
+        listResumeTemplates({ limit: PICK, offset: 0 }),
+      ]);
+      setSessions(s.items);
+      setSessionsTotal(s.total);
+      setResumes(r.items);
+      setResumesTotal(r.total);
+      setTemplates(t.items);
+      setTemplatesTotal(t.total);
+      setSessionId((prev) =>
+        prev !== NONE ? prev : (s.items[0]?.id ? String(s.items[0].id) : NONE),
+      );
+      setTemplateId((prev) =>
+        prev !== NONE ? prev : (t.items[0]?.id ? String(t.items[0].id) : NONE),
+      );
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Failed to load data.");
     } finally {
@@ -93,6 +126,36 @@ export function OutputsPage() {
       cancelled = true;
     };
   }, [sessionId]);
+
+  const sessionOptions = useMemo(
+    () =>
+      sessions.map((s) => ({
+        value: String(s.id),
+        label: `${String(s.id).slice(0, 8)}…`,
+        description: new Date(s.created_at).toLocaleDateString(),
+      })),
+    [sessions],
+  );
+
+  const resumeOptions = useMemo(
+    () =>
+      resumes.map((r) => ({
+        value: r.id,
+        label: r.original_filename?.trim() || `${r.id.slice(0, 8)}…`,
+        description: new Date(r.created_at).toLocaleDateString(),
+      })),
+    [resumes],
+  );
+
+  const templateOptions = useMemo(
+    () =>
+      templates.map((t) => ({
+        value: String(t.id),
+        label: t.name,
+        description: t.valid ? "Ready" : "Needs fix",
+      })),
+    [templates],
+  );
 
   const canGenerate = useMemo(() => {
     return !busy && sessionId !== NONE && templateId !== NONE;
@@ -146,9 +209,9 @@ export function OutputsPage() {
         <Card className="border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
           <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15">
             <CardTitle className="text-base font-semibold tracking-tight">Generate PDF</CardTitle>
-            <CardDescription className="text-sm leading-relaxed">
-              If the session has an active job description, it is included. You can also export from the Chat
-              workspace.
+            <CardDescription className="max-w-prose text-sm leading-relaxed">
+              PDF layout comes from the LaTeX template you pick—not from chat styling. If the session has an active
+              job posting, it is included. You can also start an export from the Chat workspace.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 p-4">
@@ -161,21 +224,22 @@ export function OutputsPage() {
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Session
                     </div>
-                    <Select value={sessionId} onValueChange={(v) => setSessionId(v ?? NONE)}>
-                      <SelectTrigger className="w-full" size="sm">
-                        <SelectValue placeholder="Choose a session…">
-                          {(value) => labelSessionSelectValue(value, sessions)}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE}>No session selected</SelectItem>
-                        {sessions.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.id.slice(0, 8)}… ({new Date(s.created_at).toLocaleDateString()})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableResourceCombobox
+                      value={sessionId}
+                      onValueChange={(v) => setSessionId(v)}
+                      options={sessionOptions}
+                      noneValue={NONE}
+                      noneLabel="No session selected"
+                      placeholder="Choose a session…"
+                      searchPlaceholder="Filter loaded sessions…"
+                      totalHint={
+                        sessionsTotal > sessions.length
+                          ? `Showing ${sessions.length} of ${sessionsTotal}`
+                          : sessionsTotal > 0
+                            ? `${sessionsTotal} chats`
+                            : null
+                      }
+                    />
                     <div className="text-xs text-muted-foreground">Active JD: {activeJdId ?? "—"}</div>
                   </div>
 
@@ -183,42 +247,46 @@ export function OutputsPage() {
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Resume (optional)
                     </div>
-                    <Select value={resumeId} onValueChange={(v) => setResumeId(v ?? NONE)}>
-                      <SelectTrigger className="w-full" size="sm">
-                        <SelectValue placeholder="Choose a resume…">
-                          {(value) => labelResumeSelectValue(value, resumes, NONE)}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE}>No resume selected</SelectItem>
-                        {resumes.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>
-                            {r.id.slice(0, 8)}… ({new Date(r.created_at).toLocaleDateString()})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableResourceCombobox
+                      value={resumeId}
+                      onValueChange={(v) => setResumeId(v)}
+                      options={resumeOptions}
+                      noneValue={NONE}
+                      noneLabel="No resume selected"
+                      placeholder="Choose a resume…"
+                      searchPlaceholder="Search by filename…"
+                      onQueryChange={(q) => void loadResumesPicker(q)}
+                      totalHint={
+                        resumesTotal > resumes.length
+                          ? `Showing ${resumes.length} of ${resumesTotal}`
+                          : resumesTotal > 0
+                            ? `${resumesTotal} resumes`
+                            : null
+                      }
+                    />
                   </div>
 
                   <div className="flex flex-col gap-2">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Template
                     </div>
-                    <Select value={templateId} onValueChange={(v) => setTemplateId(v ?? NONE)}>
-                      <SelectTrigger className="w-full" size="sm">
-                        <SelectValue placeholder="Choose a template…">
-                          {(value) => labelTemplateSelectValue(value, templates, NONE)}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE}>No template selected</SelectItem>
-                        {templates.map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableResourceCombobox
+                      value={templateId}
+                      onValueChange={(v) => setTemplateId(v)}
+                      options={templateOptions}
+                      noneValue={NONE}
+                      noneLabel="No template selected"
+                      placeholder="Choose a template…"
+                      searchPlaceholder="Search templates…"
+                      onQueryChange={(q) => void loadTemplatesPicker(q)}
+                      totalHint={
+                        templatesTotal > templates.length
+                          ? `Showing ${templates.length} of ${templatesTotal}`
+                          : templatesTotal > 0
+                            ? `${templatesTotal} templates`
+                            : null
+                      }
+                    />
                   </div>
                 </div>
 
@@ -252,6 +320,8 @@ export function OutputsPage() {
                       >
                         Open PDF
                       </a>
+                    ) : lastOutput.status === "failed" && lastOutput.error_text ? (
+                      <p className="text-xs leading-relaxed text-destructive">{lastOutput.error_text}</p>
                     ) : null}
                   </div>
                 ) : null}

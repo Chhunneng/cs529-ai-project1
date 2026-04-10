@@ -44,11 +44,22 @@ async def list_messages_for_session(
     session_id: uuid.UUID,
     limit: int,
     before: datetime | None,
+    anchor: str = "end",
 ) -> List[ChatMessageResponse]:
-    q = select(ChatMessage).where(ChatMessage.session_id == session_id)
+    base = select(ChatMessage).where(ChatMessage.session_id == session_id)
     if before is not None:
-        q = q.where(ChatMessage.created_at < before)
-    q = q.order_by(ChatMessage.sequence.asc(), ChatMessage.created_at.asc()).limit(limit)
+        q = base.where(ChatMessage.created_at < before).order_by(
+            ChatMessage.sequence.asc(), ChatMessage.created_at.asc()
+        ).limit(limit)
+        result = await db.execute(q)
+        rows = list(result.scalars().all())
+        return [chat_message_to_response(m) for m in rows]
+    if anchor == "end":
+        q = base.order_by(ChatMessage.sequence.desc(), ChatMessage.created_at.desc()).limit(limit)
+        result = await db.execute(q)
+        rows = list(reversed(list(result.scalars().all())))
+        return [chat_message_to_response(m) for m in rows]
+    q = base.order_by(ChatMessage.sequence.asc(), ChatMessage.created_at.asc()).limit(limit)
     result = await db.execute(q)
     rows = list(result.scalars().all())
     return [chat_message_to_response(m) for m in rows]

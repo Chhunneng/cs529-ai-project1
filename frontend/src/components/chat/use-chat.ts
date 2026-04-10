@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/components/chat/types";
 import {
@@ -15,8 +15,23 @@ import {
 const WELCOME: ChatMessage = {
   role: "assistant",
   content:
-    "Hi — link a resume template in Session tools, add a resume and optional job description, then ask for changes. Each reply can include a fresh PDF preview on the left once the worker finishes.",
+    "Hi — link a resume template in Session tools, add a resume, and add a job description, then ask for changes. When you want a PDF, use Generate PDF in Session tools.",
 };
+
+const SESSION_LINKS_HINT =
+  "Choose a resume, template, and job description in Session tools before you send a message.";
+
+const MESSAGE_WINDOW = 120;
+
+function requiredLinkIds(
+  s: SessionResponse | null | undefined,
+): { resume_template_id: string; resume_id: string; job_description_id: string } | null {
+  const r = s?.resume_id;
+  const t = s?.resume_template_id;
+  const j = s?.job_description_id;
+  if (!r || !t || !j) return null;
+  return { resume_id: r, resume_template_id: t, job_description_id: j };
+}
 
 export function useChat(
   sessionId: string | null,
@@ -25,23 +40,35 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME]);
   const [isSending, setIsSending] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   useEffect(() => {
     if (!sessionId) {
       setMessages([WELCOME]);
+      setHasOlderMessages(false);
       return;
     }
     if (isOffline) return;
 
     let cancelled = false;
-    listSessionMessages(sessionId)
+    listSessionMessages(sessionId, { limit: MESSAGE_WINDOW, anchor: "end" })
       .then((rows) => {
         if (cancelled) return;
-        setMessages(rows.length > 0 ? rows : [WELCOME]);
+        if (rows.length === 0) {
+          setMessages([WELCOME]);
+          setHasOlderMessages(false);
+          return;
+        }
+        setMessages(rows);
+        setHasOlderMessages(rows.length >= MESSAGE_WINDOW);
       })
       .catch(() => {
         if (cancelled) return;
         setMessages([WELCOME]);
+        setHasOlderMessages(false);
       });
 
     return () => {
@@ -49,23 +76,53 @@ export function useChat(
     };
   }, [sessionId, isOffline]);
 
+  const loadOlderMessages = useCallback(async () => {
+    if (!sessionId || isOffline || loadingOlder || !hasOlderMessages) return;
+    const list = messagesRef.current;
+    const first = list.find((m) => m.createdAt);
+    if (!first?.createdAt) return;
+    setLoadingOlder(true);
+    try {
+      const older = await listSessionMessages(sessionId, {
+        limit: 50,
+        before: first.createdAt,
+        anchor: "end",
+      });
+      if (older.length === 0) {
+        setHasOlderMessages(false);
+        return;
+      }
+      setHasOlderMessages(older.length >= 50);
+      setMessages((prev) => [...older, ...prev]);
+    } catch {
+      setHasOlderMessages(false);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [sessionId, isOffline, loadingOlder, hasOlderMessages]);
+
   const canSend = useMemo(
-    () => Boolean(sessionId) && !isOffline && !isSending,
-    [sessionId, isOffline, isSending],
+    () =>
+      Boolean(sessionId) &&
+      !isOffline &&
+      !isSending &&
+      requiredLinkIds(sessionLinks) !== null,
+    [sessionId, isOffline, isSending, sessionLinks],
   );
 
-  const latestPdfUrl = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant" && m.pdfDownloadUrl) return m.pdfDownloadUrl;
-    }
-    return null;
-  }, [messages]);
+  const contextHint = useMemo(() => {
+    if (!sessionId || isOffline) return null;
+    if (requiredLinkIds(sessionLinks) !== null) return null;
+    return SESSION_LINKS_HINT;
+  }, [sessionId, isOffline, sessionLinks]);
 
   const sendMessage = useCallback(
     async (textRaw: string) => {
       const text = textRaw.trim();
       if (!text || !sessionId || isOffline || isSending) return;
+
+      const ids = requiredLinkIds(sessionLinks);
+      if (!ids) return;
 
       setIsSending(true);
       setMessages((prev) => [...prev, { role: "user", content: text }]);
@@ -75,9 +132,18 @@ export function useChat(
         const userRow = await postSessionMessage({
           sessionId,
           content: text,
-          resume_template_id: sessionLinks?.resume_template_id ?? undefined,
-          resume_id: sessionLinks?.resume_id ?? undefined,
-          job_description_id: sessionLinks?.job_description_id ?? undefined,
+          resume_template_id: ids.resume_template_id,
+          resume_id: ids.resume_id,
+          job_description_id: ids.job_description_id,
+        });
+
+        setMessages((prev) => {
+          const copy = [...prev];
+          const i = copy.length - 1;
+          if (i >= 0 && copy[i].role === "user") {
+            copy[i] = apiChatRowToChatMessage(userRow);
+          }
+          return copy;
         });
 
         await new Promise<void>((resolve, reject) => {
@@ -137,5 +203,14 @@ export function useChat(
     [isOffline, isSending, sessionId, sessionLinks],
   );
 
-  return { messages, isSending, canSend, sendMessage, latestPdfUrl };
+  return {
+    messages,
+    isSending,
+    canSend,
+    sendMessage,
+    contextHint,
+    loadOlderMessages,
+    hasOlderMessages,
+    loadingOlder,
+  };
 }

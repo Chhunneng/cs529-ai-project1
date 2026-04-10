@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { VirtualList } from "@/components/lists/virtual-list";
 
 import { pingBackend } from "@/lib/api";
 import { TemplateAiGenerateBlock } from "@/components/templates/template-ai-generate-block";
@@ -9,7 +11,14 @@ import { TemplateEditor } from "@/components/templates/template-editor";
 import { useTemplates } from "@/components/templates/use-templates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,16 +30,10 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableResourceCombobox } from "@/components/ui/searchable-resource-combobox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listRowClasses } from "@/lib/list-row-styles";
-import { SELECT_NONE as NONE, labelTemplateSelectValue } from "@/lib/select-display";
+import { SELECT_NONE as NONE } from "@/lib/select-display";
 import { cn } from "@/lib/utils";
 import { Trash2 } from "lucide-react";
 
@@ -80,6 +83,16 @@ export function TemplatesManageCore({
   useEffect(() => {
     if (activeTpl?.id) setPicker(activeTpl.id);
   }, [activeTpl?.id]);
+
+  const templateOptions = useMemo(
+    () =>
+      items.map((t) => ({
+        value: t.id,
+        label: t.name,
+        description: t.valid ? "Ready" : "Needs fix",
+      })),
+    [items],
+  );
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("Custom Template");
@@ -154,14 +167,9 @@ export function TemplatesManageCore({
           ) : null}
 
           <Card className="flex min-h-0 shrink-0 flex-col border-border/90 bg-card/80 shadow-sm backdrop-blur-sm lg:w-[min(100%,360px)]">
-            <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15">
-              <div className="flex flex-row flex-wrap items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <CardTitle className="text-base font-semibold tracking-tight">Library</CardTitle>
-                  <CardDescription className="text-sm leading-relaxed">
-                    Pick a template to edit.
-                  </CardDescription>
-                </div>
+            <CardHeader className="border-b border-border/60 bg-muted/15">
+              <CardTitle className="text-base font-semibold tracking-tight">Library</CardTitle>
+              <CardAction>
                 <Button
                   size="sm"
                   variant="outline"
@@ -171,7 +179,10 @@ export function TemplatesManageCore({
                 >
                   New
                 </Button>
-              </div>
+              </CardAction>
+              <CardDescription className="text-sm leading-relaxed">
+                Pick a template to edit.
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
               {loadingList ? <Skeleton className="h-8 w-full" /> : null}
@@ -184,65 +195,62 @@ export function TemplatesManageCore({
                 </Empty>
               ) : (
                 <>
-                  <Select value={picker} onValueChange={(v) => setPicker(v ?? NONE)}>
-                    <SelectTrigger className="w-full" size="sm">
-                      <SelectValue placeholder="Choose a template…">
-                        {(value) => labelTemplateSelectValue(value, items, NONE)}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>No template selected</SelectItem>
-                      {items.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableResourceCombobox
+                    value={picker}
+                    onValueChange={(v) => setPicker(v)}
+                    options={templateOptions}
+                    noneValue={NONE}
+                    noneLabel="No template selected"
+                    placeholder="Choose a template…"
+                    searchPlaceholder="Search templates…"
+                    disabled={!apiReady || loadingList}
+                    size="sm"
+                  />
 
-                  <div className="flex max-h-[240px] flex-col gap-2 overflow-y-auto lg:max-h-none">
-                    {items.slice(0, 12).map((t) => {
+                  <VirtualList items={items} estimateSize={52} maxHeight="min(50vh,360px)" className="lg:max-h-none">
+                    {(t) => {
                       const isActive = picker === t.id;
                       return (
-                        <div
-                          key={t.id}
-                          role="row"
-                          data-state={isActive ? "selected" : undefined}
-                          className={cn(
-                            "flex min-h-11 w-full shrink-0 items-center gap-2 px-2 py-1.5 pl-3 text-left text-sm",
-                            listRowClasses(isActive),
-                          )}
-                        >
-                          <button
-                            type="button"
-                            aria-current={isActive ? "true" : undefined}
-                            onClick={() => setPicker(t.id)}
-                            className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-center gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 rounded-sm -my-0.5 py-1"
+                        <div className="px-0.5 pb-1.5">
+                          <div
+                            role="row"
+                            data-state={isActive ? "selected" : undefined}
+                            className={cn(
+                              "flex min-h-11 w-full shrink-0 items-center gap-2 px-2 py-1.5 pl-3 text-left text-sm",
+                              listRowClasses(isActive),
+                            )}
                           >
-                            <span className="truncate font-medium leading-tight text-foreground">{t.name}</span>
-                            <span className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
-                              {t.id.slice(0, 8)}…{t.id.slice(-4)}
-                            </span>
-                          </button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
-                            disabled={!apiReady || loadingList}
-                            aria-label={`Delete template ${t.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteError(null);
-                              setPendingDeleteId(t.id);
-                            }}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                            <button
+                              type="button"
+                              aria-current={isActive ? "true" : undefined}
+                              onClick={() => setPicker(t.id)}
+                              className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch justify-center gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 rounded-sm -my-0.5 py-1"
+                            >
+                              <span className="truncate font-medium leading-tight text-foreground">{t.name}</span>
+                              <span className="truncate font-mono text-[10px] leading-tight text-muted-foreground">
+                                {t.id.slice(0, 8)}…{t.id.slice(-4)}
+                              </span>
+                            </button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                              disabled={!apiReady || loadingList}
+                              aria-label={`Delete template ${t.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteError(null);
+                                setPendingDeleteId(t.id);
+                              }}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
                         </div>
                       );
-                    })}
-                  </div>
+                    }}
+                  </VirtualList>
                 </>
               )}
             </CardContent>

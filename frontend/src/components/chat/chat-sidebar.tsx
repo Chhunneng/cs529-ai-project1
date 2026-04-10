@@ -10,6 +10,9 @@ export function ChatSidebar({
   onNewChat,
   onDeleteSession,
   onRetryLoadSessions,
+  onLoadMoreSessions,
+  sessionsTotal,
+  sessionsLoadingMore,
   isChecking,
   isReady,
   sessionsLoading,
@@ -23,6 +26,9 @@ export function ChatSidebar({
   onNewChat: () => Promise<void>;
   onDeleteSession: (id: string) => Promise<void>;
   onRetryLoadSessions: () => void;
+  onLoadMoreSessions?: () => void | Promise<void>;
+  sessionsTotal?: number;
+  sessionsLoadingMore?: boolean;
   isChecking: boolean;
   isReady: boolean;
   sessionsLoading: boolean;
@@ -39,6 +45,9 @@ export function ChatSidebar({
         onNewChat={onNewChat}
         onDeleteSession={onDeleteSession}
         onRetryLoadSessions={onRetryLoadSessions}
+        onLoadMoreSessions={onLoadMoreSessions}
+        sessionsTotal={sessionsTotal}
+        sessionsLoadingMore={sessionsLoadingMore}
         isChecking={isChecking}
         isReady={isReady}
         sessionsLoading={sessionsLoading}

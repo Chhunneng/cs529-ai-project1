@@ -12,12 +12,11 @@ class SessionPatchRequest(BaseModel):
     state_json: dict | None = None
 
 
-class SessionTurnCreateBody(BaseModel):
-    """One user turn: optional run overrides plus message text."""
+class SessionMessageCreateBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
     content: str = Field(..., min_length=1)
-    resume_template_id: uuid.UUID | None = None
-    resume_id: uuid.UUID | None = None
-    job_description_id: uuid.UUID | None = None
+    resume_template_id: uuid.UUID
+    resume_id: uuid.UUID
+    job_description_id: uuid.UUID

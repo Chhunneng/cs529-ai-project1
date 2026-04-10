@@ -14,6 +14,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     createNewChat,
     removeSession,
     retryLoadSessions,
+    loadMoreSessions,
+    sessionsTotal,
+    sessionsLoadingMore,
     isChecking,
     isReady,
     sessionsLoading,
@@ -40,6 +43,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         onNewChat={handleNewChat}
         onDeleteSession={(id) => removeSession(id)}
         onRetryLoadSessions={() => retryLoadSessions()}
+        onLoadMoreSessions={() => void loadMoreSessions()}
+        sessionsTotal={sessionsTotal}
+        sessionsLoadingMore={sessionsLoadingMore}
         isChecking={isChecking}
         isReady={isReady}
         sessionsLoading={sessionsLoading}
@@ -55,6 +61,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onNewChat={handleNewChat}
           onDeleteSession={(id) => removeSession(id)}
           onRetryLoadSessions={() => retryLoadSessions()}
+          onLoadMoreSessions={() => void loadMoreSessions()}
+          sessionsTotal={sessionsTotal}
+          sessionsLoadingMore={sessionsLoadingMore}
           isChecking={isChecking}
           isReady={isReady}
           sessionsLoading={sessionsLoading}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Layers, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 
+import { AppLogo } from "@/components/brand/app-logo";
 import type { SessionResponse } from "@/lib/api";
 import { ChatSidebarPanel } from "@/components/layout/chat-sidebar-panel";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,9 @@ export function MobileAppNav({
   onNewChat,
   onDeleteSession,
   onRetryLoadSessions,
+  onLoadMoreSessions,
+  sessionsTotal = 0,
+  sessionsLoadingMore = false,
   isChecking,
   isReady,
   sessionsLoading,
@@ -30,6 +34,9 @@ export function MobileAppNav({
   onNewChat: () => Promise<void>;
   onDeleteSession: (id: string) => Promise<void>;
   onRetryLoadSessions: () => void;
+  onLoadMoreSessions?: () => void | Promise<void>;
+  sessionsTotal?: number;
+  sessionsLoadingMore?: boolean;
   isChecking: boolean;
   isReady: boolean;
   sessionsLoading: boolean;
@@ -72,6 +79,9 @@ export function MobileAppNav({
             onNewChat={onNewChat}
             onDeleteSession={onDeleteSession}
             onRetryLoadSessions={onRetryLoadSessions}
+            onLoadMoreSessions={onLoadMoreSessions}
+            sessionsTotal={sessionsTotal}
+            sessionsLoadingMore={sessionsLoadingMore}
             isChecking={isChecking}
             isReady={isReady}
             sessionsLoading={sessionsLoading}
@@ -83,9 +93,7 @@ export function MobileAppNav({
         </SheetContent>
       </Sheet>
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-          <Layers className="size-4" strokeWidth={2.25} />
-        </div>
+        <AppLogo size={32} className="rounded-lg" />
         <div className="min-w-0">
           <div className="truncate font-semibold text-sm text-foreground">Resume Agent</div>
           <div className="truncate text-xs text-muted-foreground">Menu &amp; chats</div>

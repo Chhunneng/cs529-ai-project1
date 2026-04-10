@@ -7,8 +7,8 @@ from agents import Runner
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.llm.agents_bootstrap import ONE_SHOT_AGENT_MAX_TURNS
-from backend.app.llm.agents import RESUME_EXTRACT_AGENT
-from backend.app.llm.schema import ResumeProfileV1
+from app.llm.agents import RESUME_EXTRACT_AGENT
+from app.llm.schema import ResumeProfileV1
 
 log = structlog.get_logger()
 

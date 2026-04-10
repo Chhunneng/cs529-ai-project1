@@ -69,6 +69,8 @@ class Settings(BaseSettings):
 
     app_name: str = "resume-agent-backend"
     log_level: str = "INFO"
+    log_json_format: bool = False
+    log_access_logger_name: str = "app.access"
 
     database_url: str
     redis_url: str

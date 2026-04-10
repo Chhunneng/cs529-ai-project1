@@ -1,3 +1,4 @@
+from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,11 +7,15 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.core.logging import configure_logging
+from app.core.middleware_logging import StructLogMiddleware
 from app.db.base import import_models
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
-configure_logging(settings.app.log_level)
+configure_logging(
+    settings.app.log_level,
+    json_logs=settings.log_json_format,
+)
 import_models()
 
 app = FastAPI(title=settings.app.app_name)
@@ -29,6 +34,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(StructLogMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
 
 app.include_router(api_router, prefix="/api/v1")
 

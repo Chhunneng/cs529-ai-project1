@@ -7,7 +7,7 @@ import {
   apiChatRowToChatMessage,
   listSessionMessages,
   openAssistantReplyStream,
-  postSessionTurn,
+  postSessionMessage,
   type ApiChatRow,
   type SessionResponse,
 } from "@/lib/api";
@@ -72,7 +72,7 @@ export function useChat(
 
       const streamRef: { current: EventSource | null } = { current: null };
       try {
-        const userRow = await postSessionTurn({
+        const userRow = await postSessionMessage({
           sessionId,
           content: text,
           resume_template_id: sessionLinks?.resume_template_id ?? undefined,

@@ -40,7 +40,7 @@ This service is a **FastAPI** app that:
 
 | Feature | HTTP (`features/.../api.py`) | Background jobs | Other |
 |---------|------------------------------|-----------------|--------|
-| **Sessions** | CRUD chat sessions, list messages, `POST .../turns`, PDF download, DELETE message, SSE stream | — | [`session_services.py`](../app/services/session_services.py), [`session_messages.py`](../app/services/session_messages.py) |
+| **Sessions** | CRUD chat sessions, list messages, `POST .../messages`, PDF download, DELETE message, SSE stream | — | [`session_services.py`](../app/services/session_services.py), [`session_messages.py`](../app/services/session_messages.py) |
 | **PDF agent chat** | (via sessions routes) | [`pdf_generation/jobs.py`](../app/features/pdf_generation/jobs.py) — agent + LaTeX + `pdf_artifacts` | OpenAI Agents SDK + [`SQLAlchemySession`](../app/llm/conversation_session.py), intent, scope |
 | **Resumes** | List/upload/download/delete | [`resumes/jobs.py`](../app/features/resumes/jobs.py) — parse text to `parsed_json` | [`resumes/repo.py`](../app/features/resumes/repo.py), [`resumes/service.py`](../app/features/resumes/service.py) for tool context |
 | **Job descriptions** | CRUD-style routes under `/sessions/...` and `/job-descriptions` | (ingest also via chat job path) | [`job_descriptions/repo.py`](../app/features/job_descriptions/repo.py), [`job_descriptions/service.py`](../app/features/job_descriptions/service.py) |

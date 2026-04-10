@@ -110,11 +110,11 @@ async def list_session_messages(
 
 
 @router.post(
-    "/{session_id}/turns",
+    "/{session_id}/messages",
     response_model=ChatMessageResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_session_turn(
+async def create_session_message(
     body: SessionTurnCreateBody,
     session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
@@ -129,21 +129,21 @@ async def create_session_turn(
     )
 
 
-@router.delete(
-    "/{session_id}/messages/{message_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_session_message(
-    message_id: uuid.UUID,
-    session: ChatSession = Depends(get_session_or_404),
-    db: AsyncSession = Depends(get_db_session),
-) -> Response:
-    ok = await delete_chat_message_for_session(
-        db, session_id=session.id, message_id=message_id
-    )
-    if not ok:
-        raise HTTPException(status_code=404, detail="Message not found")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+# @router.delete(
+#     "/{session_id}/messages/{message_id}",
+#     status_code=status.HTTP_204_NO_CONTENT,
+# )
+# async def delete_session_message(
+#     message_id: uuid.UUID,
+#     session: ChatSession = Depends(get_session_or_404),
+#     db: AsyncSession = Depends(get_db_session),
+# ) -> Response:
+#     ok = await delete_chat_message_for_session(
+#         db, session_id=session.id, message_id=message_id
+#     )
+#     if not ok:
+#         raise HTTPException(status_code=404, detail="Message not found")
+#     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{session_id}/pdf-artifacts/{pdf_artifact_id}/file")

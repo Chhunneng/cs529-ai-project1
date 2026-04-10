@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.worker.resume_fill_models import ResumeFillAtsV1
+from app.llm.schema import ResumeFillAtsV1
 
 
 def _latex_escape(s: str) -> str:

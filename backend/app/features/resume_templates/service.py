@@ -10,7 +10,7 @@ from agents.stream_events import AgentUpdatedStreamEvent, RawResponsesStreamEven
 from openai.types.responses import ResponseTextDeltaEvent
 
 from app.llm.agents import LATEX_RESUME_FIX_AGENT, LATEX_RESUME_SAMPLE_WRITER_AGENT
-from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS
+from app.llm.agents_bootstrap import ONE_SHOT_AGENT_MAX_TURNS
 from app.llm.schema import LatexResumeSampleOutput
 from app.schemas.resume_template import ResumeTemplateValidateResponse
 from app.features.resume_templates.latex_preview import validate_template_latex
@@ -34,7 +34,7 @@ async def _stream_latex_agent_sse_lines(
         user_input,
         context=None,
         session=None,
-        max_turns=ONESHOT_AGENT_MAX_TURNS,
+        max_turns=ONE_SHOT_AGENT_MAX_TURNS,
     )
     try:
         async for ev in stream_result.stream_events():

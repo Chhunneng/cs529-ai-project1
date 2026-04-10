@@ -15,7 +15,7 @@ from app.features.latex.exceptions import LaTeXCompileFailed
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.job_description import JobDescription
-from app.llm.conversation_session import build_sqlalchemy_conversation_session
+from app.llm.sessions import build_sqlalchemy_conversation_session
 from app.llm.context import ResumeAgentContext
 from app.llm.resume_chat_agent import run_resume_pdf_agent
 from app.queue_jobs import ResumePdfGenerationJob
@@ -124,78 +124,9 @@ async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
         job_description_id = uuid.UUID(job.job_description_id) if job.job_description_id is not None else None
         resume_template_id = uuid.UUID(job.resume_template_id) if job.resume_template_id is not None else None
 
-    # intent = await classify_intent(user_text=user_text)
-
-    # if intent.intent == "job_description":
-    #     jd_id = await create_job_description_and_activate(session_id=session_id, raw_text=user_text)
-    #     assistant_text = (
-    #         "Saved that job description and set it as active for this session. "
-    #         f"Job description id: {jd_id}"
-    #     )
-    #     seq = await next_message_sequence(session_id=session_id)
-    #     assistant_id = await insert_assistant_message(
-    #         session_id=session_id,
-    #         content=assistant_text,
-    #         sequence=seq,
-    #         tool_used="internal.job_description_ingest",
-    #         pdf_artifact_id=None,
-    #     )
-    #     await publish_chat_reply(
-    #         user_message_id=message_id,
-    #         session_id=session_id,
-    #         assistant_message_id=assistant_id,
-    #         pdf_artifact_id=None,
-    #     )
-    #     return
-
-    # prior_for_scope = await _prior_assistant_snippet(
-    #     session_id=session_id,
-    #     before_sequence=user_message.sequence,
-    # )
-    # scope = await check_resume_scope(user_text=user_text, prior_context=prior_for_scope)
 
     seq = await next_message_sequence(session_id=session_id)
 
-    # if not scope.is_related_to_resume_job:
-    #     assistant_text = (
-    #         "I'm only set up to help with resumes, job descriptions, and tailoring in this app. "
-    #         "Ask something in that area—like updating your resume, reviewing a job posting, "
-    #         "or matching your resume to a role."
-    #     )
-    #     assistant_id = await insert_assistant_message(
-    #         session_id=session_id,
-    #         content=assistant_text,
-    #         sequence=seq,
-    #         tool_used="scope_guardrail",
-    #         pdf_artifact_id=None,
-    #     )
-    #     await publish_chat_reply(
-    #         user_message_id=message_id,
-    #         session_id=session_id,
-    #         assistant_message_id=assistant_id,
-    #         pdf_artifact_id=None,
-    #     )
-    #     return
-
-    # if resume_template_id is None:
-    #     assistant_text = (
-    #         "Link a resume template to this session (or pass template_id with your message) "
-    #         "so I can generate a PDF."
-    #     )
-    #     assistant_id = await insert_assistant_message(
-    #         session_id=session_id,
-    #         content=assistant_text,
-    #         sequence=seq,
-    #         tool_used="server.validation",
-    #         pdf_artifact_id=None,
-    #     )
-    #     await publish_chat_reply(
-    #         user_message_id=message_id,
-    #         session_id=session_id,
-    #         assistant_message_id=assistant_id,
-    #         pdf_artifact_id=None,
-    #     )
-    #     return
 
     memory_session = build_sqlalchemy_conversation_session(chat_session_id=session_id)
     tool_context = ResumeAgentContext(

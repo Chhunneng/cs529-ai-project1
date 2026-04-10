@@ -6,7 +6,7 @@ import structlog
 from agents import Runner
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS
+from app.llm.agents_bootstrap import ONE_SHOT_AGENT_MAX_TURNS
 from backend.app.llm.agents import RESUME_EXTRACT_AGENT
 from backend.app.llm.schema import ResumeProfileV1
 
@@ -81,7 +81,7 @@ async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
     result = await Runner.run(
         RESUME_EXTRACT_AGENT,
         user_message,
-        max_turns=ONESHOT_AGENT_MAX_TURNS,
+        max_turns=ONE_SHOT_AGENT_MAX_TURNS,
     )
     final = result.final_output
     if not isinstance(final, ResumeProfileV1):

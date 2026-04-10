@@ -1,34 +1,15 @@
 from __future__ import annotations
 
-import json
-from typing import Any
 
 import structlog
-from agents import Agent, Runner
+from agents import Runner
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.core.config import settings
-from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS, ensure_agents_openai_configured
-from app.worker.resume_fill_models import ResumeFillAtsV1
+from app.llm.agents_bootstrap import ONE_SHOT_AGENT_MAX_TURNS
+from app.llm.schema import ResumeFillAtsV1
+from app.llm.agents import RESUME_FILL_AGENT
 
 log = structlog.get_logger()
-
-_RESUME_FILL_INSTRUCTIONS = (
-    "You fill resume templates with structured data only.\n"
-    "Return the final structured object matching the output schema exactly.\n"
-    "Use professional, ATS-friendly wording. Do not invent employers, degrees, or dates "
-    "contradicting the provided resume context unless the user asked for placeholders."
-)
-
-
-def _resume_fill_agent() -> Agent[Any]:
-    return Agent[Any](
-        name="ResumeFill",
-        instructions=_RESUME_FILL_INSTRUCTIONS,
-        model=settings.openai.model,
-        output_type=ResumeFillAtsV1,
-        tools=[],
-    )
 
 
 def _user_message_for_fill(
@@ -41,7 +22,9 @@ def _user_message_for_fill(
         "Use professional, ATS-friendly wording.",
     ]
     if resume_context.strip():
-        user_parts.append("--- Existing resume / profile data (may be partial) ---\n" + resume_context)
+        user_parts.append(
+            "--- Existing resume / profile data (may be partial) ---\n" + resume_context
+        )
     if job_description_context and job_description_context.strip():
         user_parts.append("--- Target job description ---\n" + job_description_context)
     user_parts.append(
@@ -56,17 +39,16 @@ async def generate_resume_fill(
     resume_context: str,
     job_description_context: str | None,
 ) -> ResumeFillAtsV1:
-    ensure_agents_openai_configured()
     user_message = _user_message_for_fill(
         resume_context=resume_context,
         job_description_context=job_description_context,
     )
     result = await Runner.run(
-        _resume_fill_agent(),
+        RESUME_FILL_AGENT,
         user_message,
         context=None,
         session=None,
-        max_turns=ONESHOT_AGENT_MAX_TURNS,
+        max_turns=ONE_SHOT_AGENT_MAX_TURNS,
     )
     final = result.final_output
     if isinstance(final, ResumeFillAtsV1):

@@ -546,7 +546,7 @@ export function ContextPanel({
                   searchPlaceholder="Search by filename…"
                   disabled={!apiReady}
                   size="sm"
-                  onQueryChange={(q) => void loadResumePicker(q)}
+                  onQueryChange={loadResumePicker}
                   fallbackLabel={resumeFallbackLabel}
                   totalHint={
                     resumesTotal > resumes.length
@@ -728,7 +728,7 @@ export function ContextPanel({
                   searchPlaceholder="Search templates…"
                   disabled={!apiReady}
                   size="sm"
-                  onQueryChange={(q) => void loadTemplatePicker(q)}
+                  onQueryChange={loadTemplatePicker}
                   fallbackLabel={templateFallbackLabel}
                   totalHint={
                     templatesTotal > templates.length

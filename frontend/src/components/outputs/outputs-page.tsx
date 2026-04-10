@@ -255,7 +255,7 @@ export function OutputsPage() {
                       noneLabel="No resume selected"
                       placeholder="Choose a resume…"
                       searchPlaceholder="Search by filename…"
-                      onQueryChange={(q) => void loadResumesPicker(q)}
+                      onQueryChange={loadResumesPicker}
                       totalHint={
                         resumesTotal > resumes.length
                           ? `Showing ${resumes.length} of ${resumesTotal}`
@@ -278,7 +278,7 @@ export function OutputsPage() {
                       noneLabel="No template selected"
                       placeholder="Choose a template…"
                       searchPlaceholder="Search templates…"
-                      onQueryChange={(q) => void loadTemplatesPicker(q)}
+                      onQueryChange={loadTemplatesPicker}
                       totalHint={
                         templatesTotal > templates.length
                           ? `Showing ${templates.length} of ${templatesTotal}`

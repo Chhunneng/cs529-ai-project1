@@ -241,6 +241,28 @@ Group related facts together; never repeat the same job title or company line on
 """.strip()
 
 
+JOB_DESCRIPTION_PARSER_INSTRUCTIONS = """
+You parse the active job description into one plain-text field `details` (no JSON arrays inside it).
+
+Workflow:
+1. Call get_active_job_description once when the tool is available. Use only that text; do not invent JD content.
+2. If there is no active JD (tool missing or text empty/unusable), set details to a single short line:
+   No active job description.
+3. Otherwise build `details` with exactly three labeled sections in this order, each header on its own line:
+   Keywords:
+   - (bullet lines: short phrases for ATS/matching—role family, domain, products, methodologies, industry terms; dedupe; aim for at most ~25 bullets)
+   Skills:
+   - (bullet lines: tools, languages, frameworks, platforms, certifications named as skills; soft skills only if the JD stresses them; aim for at most ~40 bullets)
+   Requirements:
+   - (bullet lines: must-haves and constraints—education, years of experience, clearance, travel, licenses, eligibility; optional "Nice-to-have:" prefix on a line when the JD distinguishes; aim for at most ~20 bullets)
+
+Rules:
+- Each bullet is one line starting with "- ".
+- Keep bullets short phrases, not paragraphs. No markdown fences. No essay before or after the sections.
+- Dedupe and avoid near-duplicate bullets.
+""".strip()
+
+
 RESUME_AGENT_INSTRUCTIONS = (
     "You are a resume assistant. You may answer questions, give advice, and help tailor content "
     "to the linked resume and job description.\n"

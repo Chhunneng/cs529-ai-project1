@@ -1,6 +1,6 @@
 """Tests for pdflatex log summarization."""
 
-from app.services.latex_compile import compile_failure_detail, summarize_pdflatex_log
+from app.features.latex.service import compile_failure_detail, summarize_pdflatex_log
 
 
 def test_summarize_extracts_geometry_doubled_backslash_and_hint() -> None:

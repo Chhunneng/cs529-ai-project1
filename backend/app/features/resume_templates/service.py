@@ -9,7 +9,7 @@ from agents import Runner
 from agents.stream_events import AgentUpdatedStreamEvent, RawResponsesStreamEvent, RunItemStreamEvent
 from openai.types.responses import ResponseTextDeltaEvent
 
-from app.llm.agents import latex_resume_fix_agent, latex_resume_sample_writer_agent
+from app.llm.agents import LATEX_RESUME_FIX_AGENT, LATEX_RESUME_SAMPLE_WRITER_AGENT
 from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS
 from app.llm.schema import LatexResumeSampleOutput
 from app.schemas.resume_template import ResumeTemplateValidateResponse
@@ -65,7 +65,7 @@ async def _stream_latex_agent_sse_lines(
 
 async def stream_generate_latex_from_requirements_sse(*, requirements: str) -> AsyncIterator[str]:
     async for line in _stream_latex_agent_sse_lines(
-        agent=latex_resume_sample_writer_agent,
+        agent=LATEX_RESUME_SAMPLE_WRITER_AGENT,
         user_input=requirements,
         error_log_key="latex_resume_sample_writer_agent_error",
         user_error_detail="Generation failed. Try again later.",
@@ -85,7 +85,7 @@ def _user_message_for_latex_fix(*, latex_source: str, error_message: str) -> str
 async def stream_fix_resume_template_latex_sse(*, latex_source: str, error_message: str) -> AsyncIterator[str]:
     user_input = _user_message_for_latex_fix(latex_source=latex_source, error_message=error_message)
     async for line in _stream_latex_agent_sse_lines(
-        agent=latex_resume_fix_agent,
+        agent=LATEX_RESUME_FIX_AGENT,
         user_input=user_input,
         error_log_key="latex_resume_fix_agent_error",
         user_error_detail="Fix failed. Try again later.",

@@ -13,7 +13,6 @@ class ResumePdfGenerationJob(BaseModel):
     type: Literal["resume_pdf_generation"] = "resume_pdf_generation"
     session_id: str
     user_message_id: str
-    input_hash: str
     resume_template_id: str | None = None
     resume_id: str | None = None
     job_description_id: str | None = None

@@ -1,4 +1,3 @@
-import hashlib
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -86,12 +85,10 @@ async def create_session_turn_and_enqueue(
     await db.commit()
     await db.refresh(msg)
 
-    input_hash = hashlib.sha256(f"{msg.session_id}:{msg.content}".encode("utf-8")).hexdigest()
     await enqueue_job(
         ResumePdfGenerationJob(
             session_id=str(msg.session_id),
             user_message_id=str(msg.id),
-            input_hash=input_hash,
             resume_template_id=str(resume_template_id) if resume_template_id else None,
             resume_id=str(resume_id) if resume_id else None,
             job_description_id=str(job_description_id) if job_description_id else None,

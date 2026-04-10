@@ -13,7 +13,10 @@ log = structlog.get_logger()
 
 
 async def main() -> None:
-    configure_logging(settings.app.log_level)
+    configure_logging(
+        settings.app.log_level,
+        json_logs=settings.log_json_format,
+    )
     log.info("worker_starting")
 
     async with engine.begin() as conn:

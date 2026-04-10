@@ -24,6 +24,58 @@ export type ResourceOption = {
   description?: string;
 };
 
+const PANEL_MARGIN = 8;
+const VIEWPORT_PAD = 8;
+/** Search row: input + borders/padding (approximate, matches layout). */
+const SEARCH_BLOCK_HEIGHT = 52;
+/** Tailwind max-h-60 */
+const LIST_MAX_CAP_PX = 240;
+const PANEL_MAX_WIDTH_PX = 448;
+
+function computePanelLayout(trigger: DOMRect): {
+  top: number;
+  left: number;
+  width: number;
+  listMaxHeight: number;
+} {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const width = Math.min(trigger.width, vw - 2 * VIEWPORT_PAD, PANEL_MAX_WIDTH_PX);
+  let left = trigger.left;
+  left = Math.max(VIEWPORT_PAD, Math.min(left, vw - width - VIEWPORT_PAD));
+
+  const spaceForListBelow = vh - trigger.bottom - PANEL_MARGIN - SEARCH_BLOCK_HEIGHT - VIEWPORT_PAD;
+  const spaceForListAbove = trigger.top - PANEL_MARGIN - SEARCH_BLOCK_HEIGHT - VIEWPORT_PAD;
+
+  const placeBelow = spaceForListBelow >= spaceForListAbove;
+  let listMaxHeight = Math.min(
+    LIST_MAX_CAP_PX,
+    Math.max(48, placeBelow ? spaceForListBelow : spaceForListAbove),
+  );
+
+  let top: number;
+  if (placeBelow) {
+    top = trigger.bottom + PANEL_MARGIN;
+  } else {
+    top = trigger.top - PANEL_MARGIN - SEARCH_BLOCK_HEIGHT - listMaxHeight;
+  }
+
+  const panelBottom = () => top + SEARCH_BLOCK_HEIGHT + listMaxHeight;
+  if (panelBottom() > vh - VIEWPORT_PAD) {
+    listMaxHeight = Math.max(48, vh - VIEWPORT_PAD - top - SEARCH_BLOCK_HEIGHT);
+  }
+  if (top < VIEWPORT_PAD) {
+    top = VIEWPORT_PAD;
+    listMaxHeight = Math.min(
+      listMaxHeight,
+      Math.max(48, vh - VIEWPORT_PAD - top - SEARCH_BLOCK_HEIGHT),
+    );
+  }
+
+  return { top, left, width, listMaxHeight };
+}
+
 export function SearchableResourceCombobox({
   value,
   onValueChange,
@@ -64,14 +116,28 @@ export function SearchableResourceCombobox({
   const [query, setQuery] = useState("");
   const triggerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 0 });
+  const onQueryChangeRef = useRef(onQueryChange);
+
+  useLayoutEffect(() => {
+    onQueryChangeRef.current = onQueryChange;
+  }, [onQueryChange]);
+
+  const [panelPos, setPanelPos] = useState({
+    top: 0,
+    left: 0,
+    width: 0,
+    listMaxHeight: LIST_MAX_CAP_PX,
+  });
+
   const deferredOptions = useDeferredValue(options);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
   useEffect(() => {
-    if (!open || !onQueryChange) return;
-    onQueryChange(deferredQuery);
-  }, [open, deferredQuery, onQueryChange]);
+    if (!open) return;
+    const fn = onQueryChangeRef.current;
+    if (!fn) return;
+    fn(deferredQuery);
+  }, [open, deferredQuery]);
 
   const closeDropdown = useCallback(() => {
     setQuery("");
@@ -82,11 +148,28 @@ export function SearchableResourceCombobox({
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const margin = 4;
-    setPanelPos({
-      top: r.bottom + margin,
-      left: r.left,
-      width: r.width,
+    setPanelPos(computePanelLayout(r));
+  }, []);
+
+  const refinePositionAfterPaint = useCallback(() => {
+    const trigger = triggerRef.current;
+    const panel = contentRef.current;
+    if (!trigger || !panel) return;
+
+    const r = trigger.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const bottom = panel.getBoundingClientRect().bottom;
+    if (bottom <= vh - VIEWPORT_PAD) return;
+
+    const overflow = bottom - (vh - VIEWPORT_PAD);
+    setPanelPos((prev) => {
+      const nextList = Math.max(48, prev.listMaxHeight - overflow);
+      if (nextList === prev.listMaxHeight) return prev;
+      const placedBelow = prev.top >= r.bottom - 1;
+      const nextTop = placedBelow
+        ? prev.top
+        : r.top - PANEL_MARGIN - SEARCH_BLOCK_HEIGHT - nextList;
+      return { ...prev, listMaxHeight: nextList, top: nextTop };
     });
   }, []);
 
@@ -106,8 +189,10 @@ export function SearchableResourceCombobox({
     };
   }, [open, updatePanelPosition]);
 
+  const serverSideFilter = onQueryChange != null;
+
   const filtered = useMemo(() => {
-    if (onQueryChange) return deferredOptions;
+    if (serverSideFilter) return deferredOptions;
     const q = deferredQuery;
     if (!q) return deferredOptions;
     return deferredOptions.filter(
@@ -116,7 +201,13 @@ export function SearchableResourceCombobox({
         o.value.toLowerCase().includes(q) ||
         (o.description?.toLowerCase().includes(q) ?? false),
     );
-  }, [deferredOptions, deferredQuery, onQueryChange]);
+  }, [deferredOptions, deferredQuery, serverSideFilter]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const raf = requestAnimationFrame(() => refinePositionAfterPaint());
+    return () => cancelAnimationFrame(raf);
+  }, [open, filtered.length, noneValue, refinePositionAfterPaint]);
 
   const selectedLabel = useMemo(() => {
     if (noneValue != null && value === noneValue) return noneLabel;
@@ -164,7 +255,7 @@ export function SearchableResourceCombobox({
                   aria-label={searchPlaceholder}
                 />
               </div>
-              <CommandList className="max-h-60">
+              <CommandList style={{ maxHeight: panelPos.listMaxHeight }} className="overflow-y-auto">
                 <CommandEmpty>{emptyText}</CommandEmpty>
                 <CommandGroup>
                   {noneValue != null ? (

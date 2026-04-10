@@ -1,6 +1,15 @@
-from agents import Agent
+from agents import Agent, ModelSettings
+from openai.types.shared import Reasoning
 
-from app.llm.schema import LatexResumeSampleOutput
+from app.llm.schema import LatexResumeSampleOutput, ResumePdfMessageOutput, ResumeProfileV1
+from app.llm.tools import (
+  get_resume_overview,
+  get_resume_excerpt,
+  search_in_resume,
+  get_active_job_description,
+  get_resume_template_latex,
+  check_latex_compiles_on_server,
+)
 
 # Raw string: show the model real single backslashes (e.g. \documentclass) without Python "\n" escapes.
 _LATEX_RESUME_SAMPLE_WRITER_INSTRUCTIONS = r"""
@@ -182,7 +191,7 @@ University Name, Country
 ```
 """.strip()
 
-latex_resume_sample_writer_agent = Agent(
+LATEX_RESUME_SAMPLE_WRITER_AGENT = Agent(
     name="Latex Resume Sample Writer Agent",
     instructions=_LATEX_RESUME_SAMPLE_WRITER_INSTRUCTIONS,
     model="gpt-5-nano",
@@ -207,9 +216,72 @@ Rules:
   with the existing preamble when possible.
 """.strip()
 
-latex_resume_fix_agent = Agent(
+LATEX_RESUME_FIX_AGENT = Agent(
     name="Latex Resume Fix Agent",
     instructions=_LATEX_RESUME_FIX_INSTRUCTIONS,
     model="gpt-5-nano",
     output_type=LatexResumeSampleOutput,
 )
+
+
+_RESUME_EXTRACT_INSTRUCTIONS = """
+You extract resume plain text into one structured object. 
+Fill every required field; use empty string or empty arrays where nothing applies. 
+No markdown or commentary in field values. 
+Set _schema_version to 1. 
+Group related facts together; never repeat the same job title or company line on consecutive rows.
+""".strip()
+
+
+RESUME_EXTRACT_AGENT = Agent(
+    name="Resume Extract Agent",
+    instructions=_RESUME_EXTRACT_INSTRUCTIONS,
+    model="gpt-5-nano",
+    model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
+    output_type=ResumeProfileV1,
+)
+
+_RESUME_AGENT_INSTRUCTIONS = (
+    "You are a resume assistant. You may answer questions, give advice, and help tailor content "
+    "to the linked resume and job description.\n"
+    "Stay in scope: resumes, job descriptions, tailoring, gaps, ATS-style tips, and interview prep "
+    "that fits this workspace. Politely decline unrelated requests.\n"
+    "Do not invent employers, dates, skills, or JD requirements. Use the read tools when resume or "
+    "job description text is needed. Call get_resume_template_latex when a template is linked. "
+    "You may call check_latex_compiles_on_server on a draft to verify pdflatex can compile it here "
+    "before you return latex_document.\n"
+    "Template vs content: The linked template is for visual style and LaTeX syntax only—preamble "
+    "(\\documentclass, \\usepackage), fonts, colors, and the kinds of macros/commands used for "
+    "sections and lists. Do not treat the template as a fixed outline to copy. Replace any "
+    "placeholder or example sections with real material from the resume tools. You may add section "
+    "headings, bullet key points, summaries, or extra blocks; rename, merge, or drop template "
+    "sections when it serves the user and the job. A bad outcome is a PDF that only repeats the "
+    "template header or shell with little or no substantive resume content.\n"
+    "Your final output uses two fields: assistant_message (the reply shown in chat) and "
+    "latex_document.\n"
+    "Set latex_document to null when the user did not ask you to generate a PDF, produce an updated "
+    "typeset resume, or otherwise output a document for compilation—e.g. pure Q&A, brainstorming, "
+    "or bullet suggestions with no build request.\n"
+    "When the user clearly wants a PDF or updated resume document, set latex_document to a complete "
+    "LaTeX file pdflatex can compile (\\documentclass through \\end{document}). Reuse the "
+    "template's preamble and styling patterns when a template exists; build the document body from "
+    "fetched resume (and JD) content, not from empty template placeholders.\n"
+    "If they asked for a document but you cannot produce safe LaTeX, explain in assistant_message "
+    "and either return null for latex_document or minimal valid LaTeX that states the issue."
+)
+
+
+RESUME_PDF_AGENT = Agent(
+        name="ResumePdfAssistant",
+        instructions=_RESUME_AGENT_INSTRUCTIONS,
+        model="gpt-5-nano",
+        output_type=ResumePdfMessageOutput,
+        tools=[
+            get_resume_overview,
+            get_resume_excerpt,
+            search_in_resume,
+            get_active_job_description,
+            get_resume_template_latex,
+            check_latex_compiles_on_server,
+        ],
+    )

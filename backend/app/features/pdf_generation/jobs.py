@@ -11,15 +11,13 @@ from app.features.pdf_generation.pdf_artifacts import (
     insert_pdf_artifact_row,
     write_pdf_artifact_file,
 )
-from app.services.latex_compile import LaTeXCompileFailed
+from app.features.latex.exceptions import LaTeXCompileFailed
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.job_description import JobDescription
 from app.llm.conversation_session import build_sqlalchemy_conversation_session
-from app.llm.intent import classify_intent
-from app.llm.resume_agent_context import ResumeAgentContext
+from app.llm.context import ResumeAgentContext
 from app.llm.resume_chat_agent import run_resume_pdf_agent
-from app.llm.resume_scope import check_resume_scope
 from app.queue_jobs import ResumePdfGenerationJob
 from app.services.chat_reply_notify import publish_chat_reply
 

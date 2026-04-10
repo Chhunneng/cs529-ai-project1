@@ -2,76 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from agents.model_settings import ModelSettings
-from openai.types.shared import Reasoning
 import structlog
-from agents import Agent, Runner
-from pydantic import BaseModel, ConfigDict, Field
+from agents import Runner
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.core.config import settings
-from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS, ensure_agents_openai_configured
+from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS
+from backend.app.llm.agents import RESUME_EXTRACT_AGENT
+from backend.app.llm.schema import ResumeProfileV1
 
 log = structlog.get_logger()
-
-
-class ResumeProfileContactRow(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    label: str
-    value: str
-
-
-class ResumeProfileOutlineRow(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    depth: int
-    text: str
-
-
-class ResumeProfileSectionFlat(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    title: str
-    content: str
-
-
-class ResumeProfileV1(BaseModel):
-    """Resume profile v1: outline rows (depth + text) + contact + summary + sections_flat."""
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    schema_version: int = Field(
-        ...,
-        alias="_schema_version",
-        description="Schema version; use 1.",
-    )
-    summary: str
-    contact: list[ResumeProfileContactRow]
-    outline: list[ResumeProfileOutlineRow]
-    sections_flat: list[ResumeProfileSectionFlat]
-
-
-_RESUME_EXTRACT_INSTRUCTIONS = (
-    "You extract resume plain text into one structured object. "
-    "Fill every required field; use empty string or empty arrays where nothing applies. "
-    "No markdown or commentary in field values. "
-    "Set _schema_version to 1. "
-    "Group related facts together; never repeat the same job title or company line on consecutive rows."
-)
-
-
-def _resume_extract_agent() -> Agent[Any]:
-    return Agent[Any](
-        name="ResumeProfileExtract",
-        instructions=_RESUME_EXTRACT_INSTRUCTIONS,
-        model=settings.openai.model,
-        model_settings=ModelSettings(
-            reasoning=Reasoning(effort="medium")
-        ),
-        output_type=ResumeProfileV1,
-        tools=[],
-    )
 
 
 def _user_message_for_extract(truncated_resume: str) -> str:
@@ -83,7 +22,7 @@ def _user_message_for_extract(truncated_resume: str) -> str:
             "Contact: label/value pairs only (Name, Location, Phone, Email, LinkedIn, GitHub, etc.). "
             "Values are plain text; keep URLs short without extra prose.",
             "",
-            "Summary: at most 3 sentences or ~120 words. If the resume has no summary, use \"\". "
+            'Summary: at most 3 sentences or ~120 words. If the resume has no summary, use "". '
             "Do not paste the entire Experience section into summary.",
             "",
             "Outline: ordered `outline` rows with integer `depth` and string `text`.",
@@ -93,7 +32,7 @@ def _user_message_for_extract(truncated_resume: str) -> str:
             "EXPERIENCE (under an Experience depth-0 heading):",
             "- For each employer/role block, use this pattern so readers see one coherent job:",
             "  • depth 1: ONE line that already includes job title, company, location, and date range, e.g. "
-            "\"Software Engineer — Company Name Inc — USA — May 2023 – Jan 2026\".",
+            '"Software Engineer — Company Name Inc — USA — May 2023 – Jan 2026".',
             "  • Then depth 3 only for bullet achievements (one bullet = one outline row).",
             "- Do NOT add a separate depth-2 row that only repeats the job title if it is already in the depth-1 line.",
             "- If the source resume splits title and company on different lines, you may use depth 1 = company + dates + location "
@@ -101,7 +40,7 @@ def _user_message_for_extract(truncated_resume: str) -> str:
             "- Each bullet: one accomplishment per row; keep under ~240 characters when possible; preserve key numbers.",
             "",
             "EDUCATION:",
-            "- Prefer depth 1 = \"Degree, Field — Institution — years\" on one line when it fits.",
+            '- Prefer depth 1 = "Degree, Field — Institution — years" on one line when it fits.',
             "- Use depth 2 only for a second line (e.g. honors) when needed. Avoid extra depth for empty structure.",
             "",
             "PROJECTS:",
@@ -140,7 +79,7 @@ async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
     user_message = _user_message_for_extract(raw)
 
     result = await Runner.run(
-        _resume_extract_agent(),
+        RESUME_EXTRACT_AGENT,
         user_message,
         max_turns=ONESHOT_AGENT_MAX_TURNS,
     )

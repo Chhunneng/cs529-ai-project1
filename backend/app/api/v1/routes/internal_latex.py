@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.services.latex_compile import LaTeXCompileFailed, pdf_to_base64
-from app.features.latex.service import compile_latex_to_pdf
+from app.features.latex.exceptions import LaTeXCompileFailed
+from app.features.latex.service import compile_latex_to_pdf, pdf_to_base64
 from app.schemas.latex import LatexCompileRequest, LatexCompileResponse
 
 router = APIRouter()

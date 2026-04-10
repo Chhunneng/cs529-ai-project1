@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
@@ -22,12 +21,11 @@ from app.schemas.resume_template import (
     ResumeTemplateDetail,
     ResumeTemplateFixBody,
     ResumeTemplateGenerateBody,
-    ResumeTemplateListItem,
     ResumeTemplatePatchBody,
     ResumeTemplateValidateBody,
     ResumeTemplateValidateResponse,
 )
-from app.services.latex_compile import LaTeXCompileFailed
+from app.features.latex.exceptions import LaTeXCompileFailed
 from app.services.resume_template_services import build_template_preview_pdf, validate_template_latex
 
 router = APIRouter(prefix="/resume-templates", tags=["resume-templates"])

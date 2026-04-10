@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.features.latex.service import compile_latex_to_pdf
 from app.schemas.resume_template import ResumeTemplateValidateResponse
-from app.services.latex_compile import LaTeXCompileFailed
+from app.features.latex.exceptions import LaTeXCompileFailed
 
 
 async def validate_template_latex(*, latex_source: str) -> ResumeTemplateValidateResponse:

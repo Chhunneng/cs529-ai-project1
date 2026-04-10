@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_resume_output_or_404, get_session_or_404
 from app.db.session import get_db_session
-from app.models.agent_session import AgentSession
+from app.models.chat_session import ChatSession
 from app.models.resume_output import ResumeOutput
 from app.schemas.resume_output import ResumeOutputCreateBody, ResumeOutputResponse
 from app.services.resume_output_jobs import create_resume_output_and_enqueue
@@ -24,7 +23,7 @@ router = APIRouter(tags=["resume-outputs"])
 )
 async def create_resume_output(
     body: ResumeOutputCreateBody,
-    session: AgentSession = Depends(get_session_or_404),
+    session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> ResumeOutputResponse:
     resume_output = await create_resume_output_and_enqueue(

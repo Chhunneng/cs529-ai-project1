@@ -1,18 +1,29 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChatMessageCreateRequest(BaseModel):
+    """Legacy shape; prefer :class:`SessionTurnCreateBody` for new clients."""
+
+    model_config = ConfigDict(extra="forbid")
+
     session_id: uuid.UUID
     message: str
 
 
 class ChatMessageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: uuid.UUID
     session_id: uuid.UUID
     role: str
-    message: str
+    content: str
+    sequence: int
     created_at: datetime
-
+    pdf_artifact_id: uuid.UUID | None = None
+    pdf_download_url: str | None = Field(
+        default=None,
+        description="Relative URL to download the PDF when pdf_artifact_id is set.",
+    )

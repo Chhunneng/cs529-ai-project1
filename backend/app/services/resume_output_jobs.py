@@ -4,7 +4,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent_session import AgentSession
+from app.models.chat_session import ChatSession
 from app.queue_jobs import RenderResumeJob
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
@@ -16,7 +16,7 @@ log = structlog.get_logger()
 async def create_resume_output_and_enqueue(
     db: AsyncSession,
     *,
-    session: AgentSession,
+    session: ChatSession,
     template_id: uuid.UUID,
     source_resume_id: uuid.UUID | None,
     job_description_id: uuid.UUID | None,
@@ -25,7 +25,9 @@ async def create_resume_output_and_enqueue(
     if resume_template.scalar_one_or_none() is None:
         raise ValueError("Template not found")
 
-    resolved_jd_id = job_description_id if job_description_id is not None else session.active_jd_id
+    resolved_jd_id = (
+        job_description_id if job_description_id is not None else session.job_description_id
+    )
 
     out = ResumeOutput(
         session_id=session.id,

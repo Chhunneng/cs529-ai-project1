@@ -174,8 +174,11 @@ export function ContextPanel({
       .then((s) => {
         if (cancelled) return;
         setSession(s);
-        setResumeValue(s.selected_resume_id ?? NONE);
-        setJdValue(s.active_jd_id ?? JD_NONE);
+        setResumeValue(s.resume_id ?? NONE);
+        setJdValue(s.job_description_id ?? JD_NONE);
+        if (s.resume_template_id) {
+          setTemplateId(s.resume_template_id);
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -194,7 +197,7 @@ export function ContextPanel({
     setResumeValue(value);
     const id = value === NONE ? null : value;
     try {
-      const s = await patchSession(sessionId, { selected_resume_id: id });
+      const s = await patchSession(sessionId, { resume_id: id });
       setSession(s);
     } catch {
       setOutputNotice("Failed to update session resume.");
@@ -206,10 +209,21 @@ export function ContextPanel({
     setJdValue(value);
     const id = value === JD_NONE ? null : value;
     try {
-      const s = await patchSession(sessionId, { active_jd_id: id });
+      const s = await patchSession(sessionId, { job_description_id: id });
       setSession(s);
     } catch {
       setOutputNotice("Failed to update active job description.");
+    }
+  }
+
+  async function onTemplateChange(value: string) {
+    if (!sessionId || !apiReady) return;
+    setTemplateId(value);
+    try {
+      const s = await patchSession(sessionId, { resume_template_id: value });
+      setSession(s);
+    } catch {
+      setOutputNotice("Failed to update session template.");
     }
   }
 
@@ -297,7 +311,7 @@ export function ContextPanel({
       const initial = await createResumeOutput(sessionId, {
         template_id: templateId,
         source_resume_id: resumeValue === NONE ? null : resumeValue,
-        job_description_id: session?.active_jd_id ?? null,
+        job_description_id: session?.job_description_id ?? null,
       });
       let cur = initial;
       const deadline = Date.now() + 180_000;
@@ -579,7 +593,7 @@ export function ContextPanel({
               ) : templates.length === 0 ? (
                 <div className="text-xs text-muted-foreground">No templates available.</div>
               ) : (
-                <Select value={templateId} onValueChange={(v) => v && setTemplateId(v)}>
+                <Select value={templateId} onValueChange={(v) => v && void onTemplateChange(v)}>
                   <SelectTrigger className="w-full" size="sm">
                     <SelectValue placeholder="Choose a template…">
                       {(value) => labelTemplateSelectValue(value, templates)}

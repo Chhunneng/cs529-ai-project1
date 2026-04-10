@@ -75,12 +75,12 @@ export function JobDescriptionsPage() {
 
   const activeJdId = useMemo(() => {
     if (sessionId === NONE) return null;
-    return sessions.find((s) => s.id === sessionId)?.active_jd_id ?? null;
+    return sessions.find((s) => s.id === sessionId)?.job_description_id ?? null;
   }, [sessions, sessionId]);
 
   const displayedJds = useMemo(() => {
     if (filterSessionId === JD_FILTER_ALL) return jds;
-    const aid = sessions.find((s) => s.id === filterSessionId)?.active_jd_id;
+    const aid = sessions.find((s) => s.id === filterSessionId)?.job_description_id;
     if (!aid) return [];
     const jd = jds.find((j) => j.id === aid);
     return jd ? [jd] : [];

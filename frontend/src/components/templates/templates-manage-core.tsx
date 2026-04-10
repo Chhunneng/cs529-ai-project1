@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { pingBackend } from "@/lib/api";
+import { TemplateAiGenerateBlock } from "@/components/templates/template-ai-generate-block";
+import { TemplateCompileCheckRow } from "@/components/templates/template-compile-check";
 import { TemplateEditor } from "@/components/templates/template-editor";
 import { useTemplates } from "@/components/templates/use-templates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -31,13 +33,6 @@ import { listRowClasses } from "@/lib/list-row-styles";
 import { SELECT_NONE as NONE, labelTemplateSelectValue } from "@/lib/select-display";
 import { cn } from "@/lib/utils";
 import { Trash2 } from "lucide-react";
-
-function defaultSchema(): Record<string, unknown> {
-  return {
-    type: "object",
-    properties: {},
-  };
-}
 
 export function TemplatesManageCore({
   active,
@@ -89,29 +84,14 @@ export function TemplatesManageCore({
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("Custom Template");
   const [newLatex, setNewLatex] = useState("");
-  const [newSchemaText, setNewSchemaText] = useState(JSON.stringify(defaultSchema(), null, 2));
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const parsedNewSchema = useMemo(() => {
-    try {
-      const v = JSON.parse(newSchemaText) as unknown;
-      if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-      return v as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  }, [newSchemaText]);
-
   async function handleCreate() {
     setCreateError(null);
-    if (!parsedNewSchema) {
-      setCreateError("Schema JSON is invalid.");
-      return;
-    }
     if (!newName.trim() || !newLatex.trim()) {
       setCreateError("Name and LaTeX are required.");
       return;
@@ -121,7 +101,6 @@ export function TemplatesManageCore({
       const tpl = await create({
         name: newName.trim(),
         latex_source: newLatex,
-        schema_json: parsedNewSchema,
       });
       setCreateOpen(false);
       setPicker(tpl.id);
@@ -133,13 +112,8 @@ export function TemplatesManageCore({
     }
   }
 
-  async function handleSave(args: {
-    id: string;
-    name: string;
-    latex_source: string;
-    schema_json: Record<string, unknown>;
-  }) {
-    await save(args.id, { name: args.name, latex_source: args.latex_source, schema_json: args.schema_json });
+  async function handleSave(args: { id: string; name: string; latex_source: string }) {
+    await save(args.id, { name: args.name, latex_source: args.latex_source });
     onTemplatesChanged?.();
   }
 
@@ -275,42 +249,55 @@ export function TemplatesManageCore({
           </Card>
 
           <div className="min-h-[280px] min-w-0 flex-1 lg:min-h-0">
-            <TemplateEditor template={activeTpl} loading={loadingDetail} onSave={handleSave} />
+            <TemplateEditor
+              template={activeTpl}
+              loading={loadingDetail}
+              onSave={handleSave}
+              apiReady={apiReady}
+            />
           </div>
         </div>
       </ScrollArea>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90dvh,85vh)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 space-y-2 border-b border-border/70 px-4 pb-3 pt-4 pr-12 text-left">
             <DialogTitle>Create template</DialogTitle>
-            <DialogDescription>Provide a name, LaTeX source, and schema JSON. The server assigns a template id.</DialogDescription>
+            <DialogDescription>Provide a name and LaTeX source. The server assigns a template id.</DialogDescription>
           </DialogHeader>
-          {createError ? (
-            <Alert variant="destructive" className="border-destructive/50">
-              <AlertTitle>Create failed</AlertTitle>
-              <AlertDescription>{createError}</AlertDescription>
-            </Alert>
-          ) : null}
-          <div className="flex flex-col gap-3">
-            <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Custom Template" />
-            <textarea
-              value={newLatex}
-              onChange={(e) => setNewLatex(e.target.value)}
-              className="min-h-[160px] w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
-              placeholder="Paste LaTeX here…"
-            />
-            <textarea
-              value={newSchemaText}
-              onChange={(e) => setNewSchemaText(e.target.value)}
-              className="min-h-[160px] w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            {createError ? (
+              <Alert variant="destructive" className="mb-3 border-destructive/50">
+                <AlertTitle>Create failed</AlertTitle>
+                <AlertDescription>{createError}</AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="flex flex-col gap-3">
+              <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Custom Template" />
+              <TemplateAiGenerateBlock
+                idPrefix="create-template-ai"
+                disabled={!apiReady || creating}
+                onApplyLatex={(s) => setNewLatex(s)}
+              />
+              <textarea
+                value={newLatex}
+                onChange={(e) => setNewLatex(e.target.value)}
+                className="min-h-[200px] w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
+                placeholder="Paste LaTeX here…"
+              />
+              <TemplateCompileCheckRow
+                latex={newLatex}
+                apiReady={apiReady}
+                disabled={!apiReady || creating}
+                onApplyFixedLatex={(s) => setNewLatex(s)}
+              />
+            </div>
           </div>
-          <DialogFooter className="flex flex-row gap-2 sm:justify-end">
+          <DialogFooter className="mx-0 mb-0 shrink-0 flex flex-row gap-2 border-t border-border/70 sm:justify-end">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button disabled={!apiReady || creating || !parsedNewSchema} onClick={() => void handleCreate()}>
+            <Button disabled={!apiReady || creating} onClick={() => void handleCreate()}>
               {creating ? "Creating…" : "Create"}
             </Button>
           </DialogFooter>

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_job_description_or_404, get_session_or_404
 from app.db.session import get_db_session
-from app.models.agent_session import AgentSession
+from app.models.chat_session import ChatSession
 from app.models.job_description import JobDescription
 from app.schemas.job_description import JobDescriptionCreateBody, JobDescriptionResponse
 
@@ -20,7 +20,7 @@ router = APIRouter(tags=["job-descriptions"])
 )
 async def create_job_description(
     body: JobDescriptionCreateBody,
-    session: AgentSession = Depends(get_session_or_404),
+    session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> JobDescriptionResponse:
     job_description = JobDescription(raw_text=body.raw_text, extracted_json=None)
@@ -29,7 +29,7 @@ async def create_job_description(
     await db.refresh(job_description)
 
     if body.set_active:
-        session.active_jd_id = job_description.id
+        session.job_description_id = job_description.id
         await db.commit()
     return job_description
 
@@ -39,7 +39,7 @@ async def create_job_description(
     response_model=list[JobDescriptionResponse],
 )
 async def list_job_descriptions_for_session(
-    _session: AgentSession = Depends(get_session_or_404),
+    _session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[JobDescriptionResponse]:
@@ -73,10 +73,10 @@ async def get_job_description(
     status_code=status.HTTP_200_OK,
 )
 async def activate_job_description(
-    session: AgentSession = Depends(get_session_or_404),
+    session: ChatSession = Depends(get_session_or_404),
     job_description: JobDescription = Depends(get_job_description_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
-    session.active_jd_id = job_description.id
+    session.job_description_id = job_description.id
     await db.commit()
 

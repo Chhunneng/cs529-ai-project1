@@ -7,7 +7,7 @@ import structlog
 from app.core.config import settings
 from app.db.session import AsyncSessionMaker
 from app.models.resume import Resume
-from app.openai.resume_extract import extract_resume_profile_json
+from app.llm.resume_extract import extract_resume_profile_json
 from app.queue_jobs import ParseResumeJob
 
 log = structlog.get_logger()

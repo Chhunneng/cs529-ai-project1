@@ -55,13 +55,12 @@ export function useTemplates(apiReady: boolean) {
   );
 
   const create = useCallback(
-    async (body: { name: string; latex_source: string; schema_json: Record<string, unknown> }) => {
+    async (body: { name: string; latex_source: string }) => {
       if (!apiReady) throw new Error("API unavailable");
       setError(null);
       const tpl = await createResumeTemplate({
         name: body.name,
         latex_source: body.latex_source,
-        schema_json: body.schema_json,
       });
       await refreshList();
       setActive(tpl);
@@ -71,13 +70,12 @@ export function useTemplates(apiReady: boolean) {
   );
 
   const save = useCallback(
-    async (id: string, body: { name: string; latex_source: string; schema_json: Record<string, unknown> }) => {
+    async (id: string, body: { name: string; latex_source: string }) => {
       if (!apiReady) throw new Error("API unavailable");
       setError(null);
       const tpl = await patchResumeTemplate(id, {
         name: body.name,
         latex_source: body.latex_source,
-        schema_json: body.schema_json,
       });
       await refreshList();
       setActive(tpl);

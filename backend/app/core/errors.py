@@ -19,6 +19,12 @@ async def http_exception_handler(_request: Request, exc: StarletteHTTPException)
     elif exc.status_code == 422:
         code = "validation_error"
     detail = exc.detail
+    if isinstance(detail, dict):
+        msg = str(detail.get("message") or "Invalid input")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=error_payload(code, msg, detail),
+        )
     msg = detail if isinstance(detail, str) else str(detail)
     return JSONResponse(
         status_code=exc.status_code,

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Text, String
+from sqlalchemy import ForeignKey, Integer, Text, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,9 +12,13 @@ class ChatMessage(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "chat_messages"
 
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False
+        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False
     )
-    role: Mapped[str] = mapped_column(Text, nullable=False)  # "user" | "assistant"
-    message: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     tool_used: Mapped[str | None] = mapped_column(Text, nullable=True)
     previous_response_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    pdf_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pdf_artifacts.id", ondelete="SET NULL"), nullable=True
+    )

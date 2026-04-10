@@ -1,8 +1,8 @@
 from app.queue_jobs.payloads import (
     AgentJob,
-    ChatMessageJob,
     ParseResumeJob,
     RenderResumeJob,
+    ResumePdfGenerationJob,
     deserialize_job,
     parse_agent_job,
     serialize_job,
@@ -10,9 +10,9 @@ from app.queue_jobs.payloads import (
 
 __all__ = [
     "AgentJob",
-    "ChatMessageJob",
     "ParseResumeJob",
     "RenderResumeJob",
+    "ResumePdfGenerationJob",
     "deserialize_job",
     "parse_agent_job",
     "serialize_job",

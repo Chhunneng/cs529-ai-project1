@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionMaker
 from app.models.chat_message import ChatMessage
-from app.schemas.chat import ChatMessageResponse
 from app.services.chat_reply_notify import chat_reply_channel
 from app.services.queue import get_redis_client
+from app.services.session_messages import chat_message_to_response
 
 log = structlog.get_logger()
 
@@ -23,29 +23,19 @@ def _sse_data_line(obj: dict) -> str:
     return f"data: {json.dumps(obj, default=str)}\n\n"
 
 
-def _assistant_response_from_row(m: ChatMessage) -> ChatMessageResponse:
-    return ChatMessageResponse(
-        id=m.id,
-        session_id=m.session_id,
-        role=m.role,
-        message=m.message,
-        created_at=m.created_at,
-    )
-
-
 async def _load_assistant_for_publish(
     db: AsyncSession,
     *,
     session_id: uuid.UUID,
     user_created_at: datetime,
     assistant_message_id: uuid.UUID,
-) -> ChatMessageResponse | None:
+):
     m = await db.scalar(select(ChatMessage).where(ChatMessage.id == assistant_message_id))
     if m is None or m.role != "assistant" or m.session_id != session_id:
         return None
     if m.created_at <= user_created_at:
         return None
-    return _assistant_response_from_row(m)
+    return chat_message_to_response(m)
 
 
 async def stream_assistant_sse(
@@ -76,7 +66,7 @@ async def stream_assistant_sse(
         )
 
     if assistant is not None:
-        resp = _assistant_response_from_row(assistant)
+        resp = chat_message_to_response(assistant)
         yield _sse_data_line({"type": "assistant", "message": resp.model_dump(mode="json")})
         return
 

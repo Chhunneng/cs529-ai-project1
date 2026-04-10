@@ -15,13 +15,21 @@ def chat_reply_channel(user_message_id: uuid.UUID) -> str:
 
 
 async def publish_chat_reply(
-    *, user_message_id: uuid.UUID, session_id: uuid.UUID, assistant_message_id: uuid.UUID
+    *,
+    user_message_id: uuid.UUID,
+    session_id: uuid.UUID,
+    assistant_message_id: uuid.UUID,
+    pdf_artifact_id: uuid.UUID | None = None,
 ) -> None:
     try:
         client = await get_redis_client()
         channel = chat_reply_channel(user_message_id)
         payload = json.dumps(
-            {"assistant_message_id": str(assistant_message_id), "session_id": str(session_id)}
+            {
+                "assistant_message_id": str(assistant_message_id),
+                "session_id": str(session_id),
+                "pdf_artifact_id": str(pdf_artifact_id) if pdf_artifact_id else None,
+            }
         )
         await client.publish(channel, payload)
     except Exception:

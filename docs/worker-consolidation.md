@@ -16,15 +16,17 @@ rg 'CHAT_REPLY_CHANNEL_PREFIX|chat:reply:' backend/
 
 Same as API plus worker-oriented defaults in `app.core.config`:
 
-| Variable | Purpose |
-|----------|---------|
-| `DATABASE_URL` | Async SQLAlchemy / asyncpg |
-| `REDIS_URL` | Queue + pub/sub |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | LLM calls |
-| `LATEX_SERVICE_URL` | Internal LaTeX compile HTTP (default `http://backend:8000/api/v1/internal`) |
-| `TEMPLATES_BASE_DIR` | On-disk template root (default `/app/templates`) |
-| `ARTIFACTS_DIR` | PDF output (default `/data/artifacts`) |
-| `INTERNAL_COMPILE_TOKEN` | Optional header for LaTeX internal API |
+
+| Variable                          | Purpose                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `DATABASE_URL`                    | Async SQLAlchemy / asyncpg                                                  |
+| `REDIS_URL`                       | Queue + pub/sub                                                             |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | LLM calls                                                                   |
+| `LATEX_SERVICE_URL`               | Internal LaTeX compile HTTP (default `http://backend:8000/api/v1/internal`) |
+| `TEMPLATES_BASE_DIR`              | On-disk template root (default `/app/templates`)                            |
+| `ARTIFACTS_DIR`                   | PDF output (default `/data/artifacts`)                                      |
+| `INTERNAL_COMPILE_TOKEN`          | Optional header for LaTeX internal API                                      |
+
 
 ## Orchestrator merge (April 2026)
 

@@ -7,13 +7,16 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 
-class ChatMessageJob(BaseModel):
+class ResumePdfGenerationJob(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["chat_message"] = "chat_message"
+    type: Literal["resume_pdf_generation"] = "resume_pdf_generation"
     session_id: str
-    message_id: str
+    user_message_id: str
     input_hash: str
+    resume_template_id: str | None = None
+    resume_id: str | None = None
+    job_description_id: str | None = None
 
 
 class RenderResumeJob(BaseModel):
@@ -33,24 +36,24 @@ class ParseResumeJob(BaseModel):
 
 
 _DiscriminatedAgentJob = Annotated[
-    Union[ChatMessageJob, RenderResumeJob, ParseResumeJob], Field(discriminator="type")
+    Union[ResumePdfGenerationJob, RenderResumeJob, ParseResumeJob], Field(discriminator="type")
 ]
 
 _job_adapter = TypeAdapter(_DiscriminatedAgentJob)
 
-type AgentJob = ChatMessageJob | RenderResumeJob | ParseResumeJob
+type AgentJob = ResumePdfGenerationJob | RenderResumeJob | ParseResumeJob
 
 
-def parse_agent_job(data: object) -> ChatMessageJob | RenderResumeJob | ParseResumeJob:
+def parse_agent_job(data: object) -> ResumePdfGenerationJob | RenderResumeJob | ParseResumeJob:
     """Factory: validate dict / parsed JSON into a concrete job model."""
     return _job_adapter.validate_python(data)
 
 
-def serialize_job(job: ChatMessageJob | RenderResumeJob | ParseResumeJob) -> str:
+def serialize_job(job: ResumePdfGenerationJob | RenderResumeJob | ParseResumeJob) -> str:
     """Adapter: domain model → Redis wire string."""
     return job.model_dump_json()
 
 
-def deserialize_job(raw: str) -> ChatMessageJob | RenderResumeJob | ParseResumeJob:
+def deserialize_job(raw: str) -> ResumePdfGenerationJob | RenderResumeJob | ParseResumeJob:
     """Adapter: Redis wire string → domain model (validates)."""
     return _job_adapter.validate_json(raw)

@@ -1,63 +1,72 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import structlog
+from agents import Agent, Runner
+from pydantic import BaseModel, ConfigDict, Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
-from app.openai._sdk import async_openai_client
-from app.openai.resume_fill import _schema_for_api
+from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS, ensure_agents_openai_configured
 
 log = structlog.get_logger()
 
-# Resume profile v1: pattern-agnostic outline rows (depth + text) + contact + summary + sections_flat.
-RESUME_PROFILE_V1_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "_schema_version": {"type": "integer"},
-        "summary": {"type": "string"},
-        "contact": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "label": {"type": "string"},
-                    "value": {"type": "string"},
-                },
-                "required": ["label", "value"],
-                "additionalProperties": False,
-            },
-        },
-        "outline": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "depth": {"type": "integer"},
-                    "text": {"type": "string"},
-                },
-                "required": ["depth", "text"],
-                "additionalProperties": False,
-            },
-        },
-        "sections_flat": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string"},
-                    "content": {"type": "string"},
-                },
-                "required": ["title", "content"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    "required": ["_schema_version", "summary", "contact", "outline", "sections_flat"],
-    "additionalProperties": False,
-}
+
+class ResumeProfileContactRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    value: str
+
+
+class ResumeProfileOutlineRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    depth: int
+    text: str
+
+
+class ResumeProfileSectionFlat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    content: str
+
+
+class ResumeProfileV1(BaseModel):
+    """Resume profile v1: outline rows (depth + text) + contact + summary + sections_flat."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_version: int = Field(
+        ...,
+        alias="_schema_version",
+        description="Schema version; use 1.",
+    )
+    summary: str
+    contact: list[ResumeProfileContactRow]
+    outline: list[ResumeProfileOutlineRow]
+    sections_flat: list[ResumeProfileSectionFlat]
+
+
+_RESUME_EXTRACT_INSTRUCTIONS = (
+    "You extract resume plain text into one structured object. "
+    "Fill every required field; use empty string or empty arrays where nothing applies. "
+    "No markdown or commentary in field values. "
+    "Set _schema_version to 1. "
+    "Group related facts together; never repeat the same job title or company line on consecutive rows."
+)
+
+
+def _resume_extract_agent() -> Agent[Any]:
+    return Agent[Any](
+        name="ResumeProfileExtract",
+        instructions=_RESUME_EXTRACT_INSTRUCTIONS,
+        model=settings.openai.model,
+        output_type=ResumeProfileV1,
+        tools=[],
+    )
 
 
 def _truncate_for_model(text: str, limit: int) -> str:
@@ -66,20 +75,10 @@ def _truncate_for_model(text: str, limit: int) -> str:
     return text[:limit].rstrip() + "\n\n[…truncated for model input…]"
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=1, max=8))
-async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
-    """Stateless Responses API call: only ``input`` messages; no conversation parameter."""
-    raw = resume_text.strip()
-    if not raw:
-        raise ValueError("resume_text is empty")
-
-    truncated = _truncate_for_model(raw, settings.openai.resume_extract_max_input_chars)
-    client = async_openai_client()
-    api_schema = _schema_for_api(RESUME_PROFILE_V1_SCHEMA)
-
-    user_message = "\n\n".join(
+def _user_message_for_extract(truncated_resume: str) -> str:
+    return "\n\n".join(
         [
-            "Parse the resume plain text into JSON matching the schema exactly. Prioritize clean grouping: "
+            "Parse the resume plain text following these rules. Prioritize clean grouping: "
             "each job, school, or project should read as one unit; do not repeat the same fact on back-to-back rows.",
             "",
             "Contact: label/value pairs only (Name, Location, Phone, Email, LinkedIn, GitHub, etc.). "
@@ -128,42 +127,35 @@ async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
             "Use `_schema_version`: 1.",
             "If the text was truncated, work from what is present.",
             "--- Resume text ---",
-            truncated,
+            truncated_resume,
         ]
     )
 
-    resp = await client.responses.create(
-        model=settings.openai.model,
-        input=[
-            {
-                "role": "system",
-                "content": (
-                    "You extract resume structure into JSON only. No markdown or commentary. "
-                    "Fill every required field; use empty string or empty arrays where nothing applies. "
-                    "Group related facts together; never repeat the same job title or company line on consecutive rows."
-                ),
-            },
-            {"role": "user", "content": user_message},
-        ],
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "resume_profile_v1",
-                "strict": True,
-                "schema": api_schema,
-            }
-        },
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=1, max=8))
+async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
+    """One-shot agent run: structured resume profile, no conversation state."""
+    raw = resume_text.strip()
+    if not raw:
+        raise ValueError("resume_text is empty")
+
+    truncated = _truncate_for_model(raw, settings.openai.resume_extract_max_input_chars)
+    ensure_agents_openai_configured()
+    user_message = _user_message_for_extract(truncated)
+
+    result = await Runner.run(
+        _resume_extract_agent(),
+        user_message,
+        context=None,
+        session=None,
+        max_turns=ONESHOT_AGENT_MAX_TURNS,
     )
-    out = getattr(resp, "output_text", None) or ""
-    if not out.strip():
-        raise RuntimeError("OpenAI returned empty completion")
+    final = result.final_output
+    if not isinstance(final, ResumeProfileV1):
+        log.error("resume_extract_unexpected_output", output_type=type(final).__name__)
+        raise RuntimeError("OpenAI agent returned unexpected output type for resume extract")
 
-    try:
-        data = json.loads(out)
-    except json.JSONDecodeError as e:
-        log.error("resume_extract_json_parse_failed", content=out[:500])
-        raise RuntimeError("OpenAI returned non-JSON content") from e
-
+    data = final.model_dump(by_alias=True)
     if isinstance(data, dict):
         data.setdefault("_schema_version", 1)
     return data

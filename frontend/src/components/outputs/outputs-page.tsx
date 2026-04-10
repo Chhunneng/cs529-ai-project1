@@ -84,7 +84,7 @@ export function OutputsPage() {
     let cancelled = false;
     getSession(sessionId)
       .then((s) => {
-        if (!cancelled) setActiveJdId(s.active_jd_id);
+        if (!cancelled) setActiveJdId(s.job_description_id);
       })
       .catch(() => {
         if (!cancelled) setActiveJdId(null);

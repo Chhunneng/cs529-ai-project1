@@ -15,9 +15,8 @@ from app.models.resume import Resume
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
 from app.queue_jobs import RenderResumeJob
-from app.features.latex.service import compile_tex_to_pdf
-from app.openai.resume_fill import generate_resume_fill_json
-from app.worker.resume_fill_models import ResumeFillAtsV1
+from app.features.latex.service import compile_latex_to_pdf
+from app.llm.resume_fill import generate_resume_fill
 from app.worker.tex_renderer import render_ats_v1
 
 log = structlog.get_logger()
@@ -85,7 +84,6 @@ async def _fetch_render_context(output_id: uuid.UUID) -> dict[str, Any]:
             "session_id": ro.session_id,
             "template_id": ro.template_id,
             "input_json": ro.input_json,
-            "schema_json": rt.schema_json,
             "latex_source": rt.latex_source,
         }
 
@@ -131,7 +129,6 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
         ctx = await _fetch_render_context(output_id)
         template_id = str(ctx["template_id"])
         latex_source = ctx.get("latex_source")
-        schema_json: dict[str, Any] = ctx["schema_json"]
 
         raw_input = ctx.get("input_json") or {}
         if isinstance(raw_input, str):
@@ -152,14 +149,11 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
             jdid = uuid.UUID(str(job_description_id_raw))
             jd_context = await _fetch_jd_text(jdid)
 
-        fill_obj = await generate_resume_fill_json(
-            schema=schema_json,
+        data = await generate_resume_fill(
             resume_context=resume_context
             or "(no structured resume on file — invent plausible placeholder content)",
             job_description_context=jd_context,
         )
-
-        data = ResumeFillAtsV1.model_validate(fill_obj)
 
         if not isinstance(latex_source, str) or not latex_source.strip():
             raise RuntimeError(f"Template {template_id} has no LaTeX source in the database")
@@ -172,7 +166,7 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
         tex_path = out_dir / "resume.tex"
         tex_path.write_text(tex_body, encoding="utf-8")
 
-        pdf_bytes, _log_tail = await compile_tex_to_pdf(tex=tex_body)
+        pdf_bytes, _log_tail = await compile_latex_to_pdf(latex=tex_body)
         pdf_path = out_dir / "resume.pdf"
         pdf_path.write_bytes(pdf_bytes)
 

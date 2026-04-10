@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ContextPanel } from "@/components/chat/context-panel";
 import { ChatThread } from "@/components/chat/chat-thread";
+import { ResumePdfPreview } from "@/components/chat/resume-pdf-preview";
 import { useChat } from "@/components/chat/use-chat";
 import { useChatWorkspace } from "@/components/chat/use-chat-workspace";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,14 +25,23 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import type { ChatMessage } from "@/components/chat/types";
 
 export function ChatShell() {
-  const { activeSessionId, retryConnection, isOffline, isReady } = useChatWorkspace();
-  /** Inline context column only when sidebar + chat + panel fit (Tailwind lg). */
+  const { activeSessionId, sessions, retryConnection, isOffline, isReady } = useChatWorkspace();
   const showInlineContext = useMediaQuery("(min-width: 1024px)");
   const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
 
-  const { messages, isSending, canSend, sendMessage } = useChat(activeSessionId, isOffline);
+  const sessionRow = useMemo(
+    () => sessions.find((s) => String(s.id) === activeSessionId) ?? null,
+    [sessions, activeSessionId],
+  );
+
+  const { messages, isSending, canSend, sendMessage, latestPdfUrl } = useChat(
+    activeSessionId,
+    isOffline,
+    sessionRow,
+  );
 
   const apiOk = isReady && !isOffline;
 
@@ -43,8 +53,8 @@ export function ChatShell() {
             <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">Chat</h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
               {showInlineContext
-                ? "Message the assistant and use the right panel to link resumes, jobs, and PDFs."
-                : "Message the assistant. Use Session tools to link resumes, jobs, and PDFs."}
+                ? "PDF preview on the left; chat on the right. Use Session tools to link resume, job, and template."
+                : "PDF preview stacks above chat on small screens. Use Session tools to link resume, job, and template."}
             </p>
           </div>
           {!showInlineContext ? (
@@ -97,30 +107,38 @@ export function ChatShell() {
         ) : null}
       </header>
 
-      <div className="flex min-h-0 flex-1 p-2 md:p-2">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex min-h-0 min-w-0 w-full max-w-3xl flex-1 flex-col gap-2">
-            {!activeSessionId && !isOffline ? (
-              <Empty className="min-h-[200px] border-none bg-transparent py-8">
-                <EmptyHeader>
-                  <EmptyTitle className="font-semibold tracking-tight">Pick a conversation</EmptyTitle>
-                  <EmptyDescription className="max-w-sm opacity-90">
-                    Use <strong>New chat</strong> or choose a chat under Recent chats.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : activeSessionId ? (
-              <ChatThread messages={messages} isSending={isSending} />
-            ) : (
-              <Empty className="min-h-[200px] border-none bg-transparent py-8">
-                <EmptyHeader>
-                  <EmptyTitle className="font-semibold tracking-tight">You&apos;re offline</EmptyTitle>
-                  <EmptyDescription>Connect to the server to send messages.</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
-            <Separator className="bg-border/50" />
-            <ChatComposer disabled={!canSend} isSending={isSending} onSend={sendMessage} />
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 md:flex-row md:gap-0 md:p-2">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:hidden">
+          <ResumePdfPreview pdfUrl={latestPdfUrl} />
+          <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col">
+            <ChatColumn
+              activeSessionId={activeSessionId}
+              isOffline={isOffline}
+              messages={messages}
+              isSending={isSending}
+              canSend={canSend}
+              sendMessage={sendMessage}
+            />
+          </div>
+        </div>
+
+        <div className="hidden min-h-0 min-w-0 flex-1 md:flex">
+          {/* Flex split (no extra deps) — avoids stale Docker named volumes missing react-resizable-panels */}
+          <div className="flex min-h-[420px] min-w-0 flex-1 rounded-lg border border-border/50">
+            <div className="flex min-h-0 min-w-0 flex-[11] flex-col p-2">
+              <ResumePdfPreview pdfUrl={latestPdfUrl} />
+            </div>
+            <div className="w-px shrink-0 bg-border/80" aria-hidden />
+            <div className="flex min-h-0 min-w-0 flex-[14] flex-col p-2">
+              <ChatColumn
+                activeSessionId={activeSessionId}
+                isOffline={isOffline}
+                messages={messages}
+                isSending={isSending}
+                canSend={canSend}
+                sendMessage={sendMessage}
+              />
+            </div>
           </div>
         </div>
 
@@ -129,5 +147,49 @@ export function ChatShell() {
         ) : null}
       </div>
     </main>
+  );
+}
+
+function ChatColumn({
+  activeSessionId,
+  isOffline,
+  messages,
+  isSending,
+  canSend,
+  sendMessage,
+}: {
+  activeSessionId: string | null;
+  isOffline: boolean;
+  messages: ChatMessage[];
+  isSending: boolean;
+  canSend: boolean;
+  sendMessage: (t: string) => Promise<void>;
+}) {
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 w-full max-w-3xl flex-1 flex-col gap-2">
+        {!activeSessionId && !isOffline ? (
+          <Empty className="min-h-[200px] border-none bg-transparent py-8">
+            <EmptyHeader>
+              <EmptyTitle className="font-semibold tracking-tight">Pick a conversation</EmptyTitle>
+              <EmptyDescription className="max-w-sm opacity-90">
+                Use <strong>New chat</strong> or choose a chat under Recent chats.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : activeSessionId ? (
+          <ChatThread messages={messages} isSending={isSending} />
+        ) : (
+          <Empty className="min-h-[200px] border-none bg-transparent py-8">
+            <EmptyHeader>
+              <EmptyTitle className="font-semibold tracking-tight">You&apos;re offline</EmptyTitle>
+              <EmptyDescription>Connect to the server to send messages.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
+        <Separator className="bg-border/50" />
+        <ChatComposer disabled={!canSend} isSending={isSending} onSend={sendMessage} />
+      </div>
+    </div>
   );
 }

@@ -2,10 +2,6 @@
 
 This document describes how the FastAPI app, feature modules, shared layers, Redis jobs, and the worker fit together.
 
-## Roadmap handoff (temporary)
-
-Planned next direction (PDF-first agent chat, schema reset, OpenAI Agents session storage): see [NEXT_REFACTOR_PDF_AGENT.md](NEXT_REFACTOR_PDF_AGENT.md). **When that work is complete, delete that handoff file and remove this section (and the matching bullet in the repo root `README.md`).**
-
 ## What this backend does (simple)
 
 This service is a **FastAPI** app that:
@@ -26,7 +22,7 @@ This service is a **FastAPI** app that:
 | **Jobs (async work)** | [`backend/app/features/*/jobs.py`](../app/features/) | Handlers for background jobs (chat, parse resume, render PDF). |
 | **Repositories** | [`backend/app/features/*/repo.py`](../app/features/) | Database reads/writes for that feature. |
 | **Domain/formatting** | [`backend/app/features/*/service.py`](../app/features/) | Pure or DB-backed helpers (e.g. resume text overview). |
-| **Integrations** | [`backend/app/openai/`](../app/openai/), [`backend/app/features/latex/service.py`](../app/features/latex/service.py) | External systems (OpenAI, pdflatex). |
+| **Integrations** | [`backend/app/llm/`](../app/llm/) (OpenAI Agents SDK + client wrappers; not the PyPI `openai` package), [`backend/app/features/latex/service.py`](../app/features/latex/service.py) | External systems (OpenAI API, pdflatex). |
 | **Legacy/shared services** | [`backend/app/services/`](../app/services/) | Queue, uploads, streaming, session helpers still used by features. |
 | **DTOs** | [`backend/app/schemas/`](../app/schemas/) | Pydantic request/response models. |
 | **ORM** | [`backend/app/models/`](../app/models/) | SQLAlchemy tables. |
@@ -44,8 +40,8 @@ This service is a **FastAPI** app that:
 
 | Feature | HTTP (`features/.../api.py`) | Background jobs | Other |
 |---------|------------------------------|-----------------|--------|
-| **Sessions** | CRUD sessions, messages, SSE assistant stream | — | [`session_services.py`](../app/services/session_services.py), [`session_messages.py`](../app/services/session_messages.py) |
-| **Messages (chat)** | (via sessions routes) | [`messages/jobs.py`](../app/features/messages/jobs.py) — reply to user message | OpenAI agent, intent, scope |
+| **Sessions** | CRUD chat sessions, list messages, `POST .../turns`, PDF download, DELETE message, SSE stream | — | [`session_services.py`](../app/services/session_services.py), [`session_messages.py`](../app/services/session_messages.py) |
+| **PDF agent chat** | (via sessions routes) | [`pdf_generation/jobs.py`](../app/features/pdf_generation/jobs.py) — agent + LaTeX + `pdf_artifacts` | OpenAI Agents SDK + [`SQLAlchemySession`](../app/llm/conversation_session.py), intent, scope |
 | **Resumes** | List/upload/download/delete | [`resumes/jobs.py`](../app/features/resumes/jobs.py) — parse text to `parsed_json` | [`resumes/repo.py`](../app/features/resumes/repo.py), [`resumes/service.py`](../app/features/resumes/service.py) for tool context |
 | **Job descriptions** | CRUD-style routes under `/sessions/...` and `/job-descriptions` | (ingest also via chat job path) | [`job_descriptions/repo.py`](../app/features/job_descriptions/repo.py), [`job_descriptions/service.py`](../app/features/job_descriptions/service.py) |
 | **Resume templates** | CRUD + preview PDF | — | Preview uses [`resume_template_services.py`](../app/services/resume_template_services.py) → LaTeX |
@@ -73,7 +69,7 @@ flowchart LR
   services --> db
 ```
 
-## Chat message flow (user message → assistant reply)
+## Chat turn flow (user message → PDF agent → assistant reply)
 
 ```mermaid
 sequenceDiagram
@@ -83,22 +79,22 @@ sequenceDiagram
   participant Redis as Redis_queue
   participant Worker as worker_runner
   participant Dispatch as worker_jobs_dispatch
-  participant Job as messages_jobs
+  participant Job as pdf_generation_jobs
   participant DB as PostgreSQL
-  participant OAI as OpenAI
+  participant OAI as OpenAI_Agents
 
-  Client->>API: POST session message
-  API->>SM: create_user_message_and_enqueue
+  Client->>API: POST session turn
+  API->>SM: create_session_turn_and_enqueue
   SM->>DB: insert user ChatMessage
-  SM->>Redis: enqueue ChatMessageJob
+  SM->>Redis: enqueue ResumePdfGenerationJob
   API-->>Client: 201 message id
 
   Worker->>Redis: dequeue_job
   Worker->>Dispatch: handle_job
-  Dispatch->>Job: handle_chat_message_job
-  Job->>DB: read session flags messages
-  Job->>OAI: classify intent scope agent
-  Job->>DB: insert assistant message
+  Dispatch->>Job: handle_resume_pdf_generation_job
+  Job->>DB: read ChatSession flags messages
+  Job->>OAI: Runner with SQLAlchemySession plus tools
+  Job->>DB: insert PdfArtifact optional assistant ChatMessage
   Job->>Redis_or_pub: notify SSE subscribers
 ```
 
@@ -108,7 +104,7 @@ Exact notify path: [`chat_reply_notify.py`](../app/services/chat_reply_notify.py
 
 Job payloads are defined in [`queue_jobs/payloads.py`](../app/queue_jobs/payloads.py):
 
-- `chat_message` → [`features/messages/jobs.py`](../app/features/messages/jobs.py)
+- `resume_pdf_generation` → [`features/pdf_generation/jobs.py`](../app/features/pdf_generation/jobs.py)
 - `parse_resume` → [`features/resumes/jobs.py`](../app/features/resumes/jobs.py)
 - `render_resume` → [`features/resume_outputs/jobs.py`](../app/features/resume_outputs/jobs.py) → [`worker/render_resume.py`](../app/worker/render_resume.py)
 
@@ -123,7 +119,7 @@ flowchart TB
   subgraph workerLayer [Worker]
     runner[worker_runner main loop]
     dispatch[worker_jobs handle_job]
-    jChat[messages_jobs]
+    jPdf[pdf_generation_jobs]
     jParse[resumes_jobs]
     jRender[resume_outputs_jobs render_resume]
   end
@@ -135,10 +131,10 @@ flowchart TB
   enqueue --> q
   runner --> q
   runner --> dispatch
-  dispatch --> jChat
+  dispatch --> jPdf
   dispatch --> jParse
   dispatch --> jRender
-  jChat --> db
+  jPdf --> db
   jParse --> db
   jRender --> db
   jRender --> disk
@@ -146,8 +142,8 @@ flowchart TB
 
 ## OpenAI and resume context
 
-- Chat agent: [`openai/resume_chat_agent.py`](../app/openai/resume_chat_agent.py)
-- Resume/JD text for tools: loaded via [`features/resumes/repo.py`](../app/features/resumes/repo.py) and [`features/job_descriptions/service.py`](../app/features/job_descriptions/service.py) (prefer not adding new DB access under `openai/`).
+- Chat agent: [`llm/resume_chat_agent.py`](../app/llm/resume_chat_agent.py)
+- Resume/JD text for tools: loaded via [`features/resumes/repo.py`](../app/features/resumes/repo.py) and [`features/job_descriptions/service.py`](../app/features/job_descriptions/service.py) (prefer not adding new DB access under `llm/`).
 
 ## Operational endpoints
 

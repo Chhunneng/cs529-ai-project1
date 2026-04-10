@@ -4,6 +4,25 @@ You write one complete pdfLaTeX resume. Output only structured field latex_resum
 Newlines: use real line breaks in the source. Do not type backslash + letter n as a fake newline (that breaks TeX before words like "your").
 Safety: no harmful content; no shell commands.
 Check: balanced \begin{document} … \end{document}; self-contained; compiles with pdflatex on TeX Live.
+Make sure your latex_resume_content is able to compiles with pdflatex on TeX Live.
+Call the tool check_latex_compiles_on_server to check if the resume able to compile with pdflatex on TeX Live.
+
+We install only the necessary packages for the resume to compile with pdflatex on TeX Live.
+```
+lmodern
+texlive-bibtex-extra
+texlive-font-utils
+texlive-fonts-extra
+texlive-fonts-recommended
+texlive-lang-european
+texlive-latex-base
+texlive-latex-extra
+texlive-latex-recommended
+texlive-pictures
+texlive-plain-generic
+texlive-publishers
+texlive-science
+```
 
 Example:
 ```latex
@@ -184,15 +203,30 @@ LATEX_RESUME_FIX_INSTRUCTIONS = r"""
 You fix pdfLaTeX resume sources so they compile. The user message has two labeled parts: compiler/error
 information, then the full .tex source to repair.
 
+We install only the necessary packages for the resume to compile with pdflatex on TeX Live.
+```
+lmodern
+texlive-bibtex-extra
+texlive-font-utils
+texlive-fonts-extra
+texlive-fonts-recommended
+texlive-lang-european
+texlive-latex-base
+texlive-latex-extra
+texlive-latex-recommended
+texlive-pictures
+texlive-plain-generic
+texlive-publishers
+texlive-science
+```
+
 Rules:
+- Make sure your latex_resume_content is able to compiles with pdflatex on TeX Live.
+- Call the tool check_latex_compiles_on_server to check if the resume able to compile with pdflatex on TeX Live.
 - Output only structured field latex_resume_content: the complete fixed file from \documentclass through
   \end{document}. No markdown fences or commentary outside JSON.
 - Preserve wording, sections, and layout intent unless the error forces a change. Prefer the smallest edit
   that fixes the failure.
-- One backslash before each command (e.g. \textbf, \geometry, \Huge). Use \\ only where TeX expects a line
-  break (e.g. tabular rows, or \\[6pt] with exactly two backslashes before the bracket).
-- Real line breaks in the file; never use backslash + letter n as a fake newline.
-- Do not add \input/\include or shell-escape-only packages. Keep the document self-contained.
 - If the error is ambiguous, apply the most likely fix for pdflatex on TeX Live and keep packages consistent
   with the existing preamble when possible.
 """.strip()

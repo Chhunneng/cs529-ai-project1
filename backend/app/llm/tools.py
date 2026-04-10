@@ -6,7 +6,7 @@ from app.features.resumes.repositories import load_resume_row
 from app.features.resumes.service import build_resume_overview_text, resume_excerpt, search_resume_text
 from app.features.job_descriptions.service import fetch_job_description_excerpt
 from app.features.latex.service import compile_latex_to_pdf
-from app.llm.context import ResumeAgentContext
+from app.llm.context import ResumeAgentContext, ToolTraceContext
 from app.core.config import settings
 from app.db.session import AsyncSessionMaker
 from app.models import ResumeTemplate
@@ -142,7 +142,7 @@ async def get_resume_template_latex(ctx: RunContextWrapper[ResumeAgentContext]) 
 
 @function_tool()
 async def check_latex_compiles_on_server(
-    ctx: RunContextWrapper[ResumeAgentContext],
+    ctx: RunContextWrapper[ToolTraceContext],
     latex_source: str,
 ) -> str:
     """Try compiling LaTeX with the same server pipeline used for resume PDFs.

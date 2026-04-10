@@ -1,7 +1,7 @@
 from agents import Agent, ModelSettings
 from openai.types.shared import Reasoning
 
-from app.llm.schema import LatexResumeSampleOutput, ResumePdfMessageOutput, ResumeProfileV1
+from app.llm.schema import LatexResumeSampleOutput, ResumeFillAtsV1, ResumePdfMessageOutput, ResumeProfileV1
 from app.llm.tools import (
   get_resume_overview,
   get_resume_excerpt,
@@ -284,4 +284,21 @@ RESUME_PDF_AGENT = Agent(
             get_resume_template_latex,
             check_latex_compiles_on_server,
         ],
+    )
+
+
+_RESUME_FILL_INSTRUCTIONS = (
+    "You fill resume templates with structured data only.\n"
+    "Return the final structured object matching the output schema exactly.\n"
+    "Use professional, ATS-friendly wording. Do not invent employers, degrees, or dates "
+    "contradicting the provided resume context unless the user asked for placeholders."
+)
+
+
+RESUME_FILL_AGENT=Agent(
+        name="ResumeFill",
+        instructions=_RESUME_FILL_INSTRUCTIONS,
+        model="gpt-5-nano",
+        output_type=ResumeFillAtsV1,
+        tools=[],
     )

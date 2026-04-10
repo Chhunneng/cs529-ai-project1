@@ -20,4 +20,4 @@ def ensure_agents_openai_configured() -> None:
 
 
 # Small cap for structured one-shot agents (no tool loops).
-ONESHOT_AGENT_MAX_TURNS = 5
+ONE_SHOT_AGENT_MAX_TURNS = 5

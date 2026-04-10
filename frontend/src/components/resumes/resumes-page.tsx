@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { Braces, Download, Trash2 } from "lucide-react";
 
 import {
@@ -11,6 +11,7 @@ import {
   uploadResume,
   type ResumeListItem,
 } from "@/lib/api";
+import { VirtualList } from "@/components/lists/virtual-list";
 import { AppPageHeader } from "@/components/layout/app-page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function shortId(id: string) {
@@ -38,10 +40,16 @@ function formatBytes(n: number | null | undefined): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const PAGE_SIZE = 30;
+
 export function ResumesPage() {
   const [connection, setConnection] = useState<"checking" | "ready" | "offline">("checking");
   const apiReady = connection === "ready";
   const [items, setItems] = useState<ResumeListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [searchRaw, setSearchRaw] = useState("");
+  const deferredSearch = useDeferredValue(searchRaw.trim());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -61,14 +69,19 @@ export function ResumesPage() {
     setError(null);
     setLoading(true);
     try {
-      const rows = await listResumes();
-      setItems(rows);
+      const rows = await listResumes({
+        limit: PAGE_SIZE,
+        offset,
+        ...(deferredSearch ? { q: deferredSearch } : {}),
+      });
+      setItems(rows.items);
+      setTotal(rows.total);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load your resumes.");
     } finally {
       setLoading(false);
     }
-  }, [apiReady]);
+  }, [apiReady, offset, deferredSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +217,45 @@ export function ResumesPage() {
             </div>
           </CardHeader>
 
+          <div className="flex flex-col gap-3 border-b border-border/50 bg-muted/5 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <Input
+              placeholder="Search by filename…"
+              value={searchRaw}
+              onChange={(e) => {
+                setSearchRaw(e.target.value);
+                setOffset(0);
+              }}
+              className="max-w-full sm:max-w-xs"
+              disabled={!apiReady}
+              aria-label="Search resumes by filename"
+            />
+            <p className="text-xs text-muted-foreground">
+              {total === 0
+                ? "No resumes match"
+                : `Showing ${offset + 1}–${Math.min(offset + items.length, total)} of ${total}`}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!apiReady || loading || offset === 0}
+                onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!apiReady || loading || offset + items.length >= total}
+                onClick={() => setOffset((o) => o + PAGE_SIZE)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+
           <CardContent className="p-4">
             {loading ? (
               <div className="flex flex-col gap-3 md:grid md:grid-cols-2">
@@ -220,77 +272,76 @@ export function ResumesPage() {
                 </EmptyHeader>
               </Empty>
             ) : (
-              <div className="flex flex-col gap-3 md:grid md:grid-cols-2">
-                {items.map((r) => (
-                  <div
-                    key={r.id}
-                    className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/10 p-3"
-                  >
-                    <div className="flex flex-row items-start justify-between gap-2">
-                      <div className="min-w-0 flex flex-col gap-1">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          {r.original_filename || "Resume"}
-                        </span>
-                        <span className="break-all font-mono text-xs leading-snug text-foreground" title={r.id}>
-                          {r.id}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Added {new Date(r.created_at).toLocaleString()} · {formatBytes(r.byte_size)}
-                        </span>
+              <VirtualList items={items} estimateSize={188} maxHeight="min(70vh,640px)">
+                {(r) => (
+                  <div className="px-1 pb-3">
+                    <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/10 p-3">
+                      <div className="flex flex-row items-start justify-between gap-2">
+                        <div className="min-w-0 flex flex-col gap-1">
+                          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {r.original_filename || "Resume"}
+                          </span>
+                          <span className="break-all font-mono text-xs leading-snug text-foreground" title={r.id}>
+                            {r.id}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Added {new Date(r.created_at).toLocaleString()} · {formatBytes(r.byte_size)}
+                          </span>
+                        </div>
+                        <Badge
+                          variant={
+                            r.parse_pending ? "secondary" : r.has_file ? "default" : "secondary"
+                          }
+                        >
+                          {r.parse_pending
+                            ? "Parsing…"
+                            : r.has_file
+                              ? "File stored"
+                              : "No file"}
+                        </Badge>
                       </div>
-                      <Badge
-                        variant={
-                          r.parse_pending ? "secondary" : r.has_file ? "default" : "secondary"
-                        }
-                      >
-                        {r.parse_pending
-                          ? "Parsing…"
-                          : r.has_file
-                            ? "File stored"
-                            : "No file"}
-                      </Badge>
-                    </div>
-                    <div className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!apiReady || r.parsed_json == null}
-                        onClick={() => setJsonViewResume(r)}
-                        aria-label={`View parsed JSON for ${shortId(r.id)}`}
-                      >
-                        <Braces className="size-4" strokeWidth={2} />
-                        Parsed JSON
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!apiReady || !r.has_file || downloadingId === r.id}
-                        onClick={() => void handleDownload(r)}
-                      >
-                        <Download className="size-4" strokeWidth={2} />
-                        {downloadingId === r.id ? "Downloading…" : "Download"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        disabled={!apiReady || isDeleting}
-                        aria-label={`Delete resume ${shortId(r.id)}`}
-                        onClick={() => {
-                          setDeleteError(null);
-                          setPendingDeleteId(r.id);
-                        }}
-                      >
-                        <Trash2 className="size-4" strokeWidth={2} />
-                        Delete
-                      </Button>
+                      <div className="flex flex-row flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!apiReady || r.parsed_json == null}
+                          onClick={() => setJsonViewResume(r)}
+                          aria-label={`View parsed JSON for ${shortId(r.id)}`}
+                        >
+                          <Braces className="size-4" strokeWidth={2} />
+                          Parsed JSON
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!apiReady || !r.has_file || downloadingId === r.id}
+                          onClick={() => void handleDownload(r)}
+                        >
+                          <Download className="size-4" strokeWidth={2} />
+                          {downloadingId === r.id ? "Downloading…" : "Download"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={!apiReady || isDeleting}
+                          aria-label={`Delete resume ${shortId(r.id)}`}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setPendingDeleteId(r.id);
+                          }}
+                        >
+                          <Trash2 className="size-4" strokeWidth={2} />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+              </VirtualList>
             )}
           </CardContent>
         </Card>

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { VirtualList } from "@/components/lists/virtual-list";
+
 import {
   activateJobDescription,
   createJobDescription,
@@ -27,21 +29,10 @@ import {
 } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableResourceCombobox } from "@/components/ui/searchable-resource-combobox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listRowClasses } from "@/lib/list-row-styles";
-import {
-  JD_FILTER_ALL,
-  SELECT_NONE as NONE,
-  labelJdListFilterValue,
-  labelSessionSelectValue,
-} from "@/lib/select-display";
+import { JD_FILTER_ALL, SELECT_NONE as NONE } from "@/lib/select-display";
 import { cn } from "@/lib/utils";
 
 function previewLine(raw: string, max = 100): string {
@@ -103,12 +94,12 @@ export function JobDescriptionsPage() {
     setLoadingJds(true);
     try {
       const [rows, list] = await Promise.all([
-        listSessions(),
-        listJobDescriptions({ limit: 200 }),
+        listSessions({ limit: 200, offset: 0 }),
+        listJobDescriptions({ limit: 200, offset: 0 }),
       ]);
-      setSessions(rows);
-      setJds(list);
-      setSessionId((prev) => (prev !== NONE ? prev : (rows[0]?.id ?? NONE)));
+      setSessions(rows.items);
+      setJds(list.items);
+      setSessionId((prev) => (prev !== NONE ? prev : (rows.items[0]?.id ?? NONE)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load sessions or job postings.");
       setJds([]);
@@ -161,6 +152,26 @@ export function JobDescriptionsPage() {
   const noSession = sessionId === NONE;
   const canPaste = apiReady && !noSession && !pasteBusy;
   const filterIsAll = filterSessionId === JD_FILTER_ALL;
+
+  const sessionPickerOptions = useMemo(
+    () =>
+      sessions.map((s) => ({
+        value: s.id,
+        label: `${s.id.slice(0, 8)}…`,
+        description: new Date(s.created_at).toLocaleDateString(),
+      })),
+    [sessions],
+  );
+
+  const filterPickerOptions = useMemo(
+    () =>
+      sessions.map((s) => ({
+        value: s.id,
+        label: `Active in ${s.id.slice(0, 8)}…`,
+        description: new Date(s.created_at).toLocaleDateString(),
+      })),
+    [sessions],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -225,28 +236,19 @@ export function JobDescriptionsPage() {
             ) : (
               <div className="flex max-w-md flex-col gap-2">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Chat</div>
-                <Select
+                <SearchableResourceCombobox
                   value={sessionId}
                   onValueChange={(v) => {
-                    setSessionId(v ?? NONE);
+                    setSessionId(v);
                     setError(null);
                   }}
+                  options={sessionPickerOptions}
+                  noneValue={NONE}
+                  noneLabel="No session selected"
+                  placeholder="Choose a session…"
+                  searchPlaceholder="Filter loaded chats…"
                   disabled={!apiReady}
-                >
-                  <SelectTrigger className="w-full" size="sm">
-                    <SelectValue placeholder="Choose a session…">
-                      {(value) => labelSessionSelectValue(value, sessions)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>No session selected</SelectItem>
-                    {sessions.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.id.slice(0, 8)}… ({new Date(s.created_at).toLocaleDateString()})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
             )}
             {noSession ? (
@@ -293,25 +295,16 @@ export function JobDescriptionsPage() {
           <CardContent className="flex flex-col gap-4 p-4">
             <div className="flex max-w-md flex-col gap-2">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Show</div>
-              <Select
+              <SearchableResourceCombobox
                 value={filterSessionId}
-                onValueChange={(v) => setFilterSessionId(v ?? JD_FILTER_ALL)}
+                onValueChange={(v) => setFilterSessionId(v)}
+                options={filterPickerOptions}
+                noneValue={JD_FILTER_ALL}
+                noneLabel="All postings"
+                placeholder="Filter list…"
+                searchPlaceholder="Filter by chat…"
                 disabled={!apiReady || loadingSessions}
-              >
-                <SelectTrigger className="w-full" size="sm">
-                  <SelectValue>
-                    {(value) => labelJdListFilterValue(value, sessions)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={JD_FILTER_ALL}>All postings</SelectItem>
-                  {sessions.map((s) => (
-                    <SelectItem key={`filter-${s.id}`} value={s.id}>
-                      Active in {s.id.slice(0, 8)}… ({new Date(s.created_at).toLocaleDateString()})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             {loadingJds ? (
@@ -351,54 +344,55 @@ export function JobDescriptionsPage() {
                 </EmptyHeader>
               </Empty>
             ) : (
-              <div className="flex flex-col gap-2">
-                {displayedJds.map((jd) => {
+              <VirtualList items={displayedJds} estimateSize={108} maxHeight="min(65vh,560px)">
+                {(jd) => {
                   const isActive = activeJdId === jd.id;
                   return (
-                    <div
-                      key={jd.id}
-                      role="row"
-                      data-state={isActive ? "selected" : undefined}
-                      className={cn(
-                        "flex min-h-11 w-full flex-col gap-2 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:gap-3",
-                        listRowClasses(isActive),
-                      )}
-                    >
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 rounded-md -mx-1 px-1"
-                        aria-current={isActive ? "true" : undefined}
-                        onClick={() => setViewJd(jd)}
-                      >
-                        <span className="truncate text-sm font-medium leading-snug text-foreground">
-                          {previewLine(jd.raw_text)}
-                        </span>
-                        <span className="font-mono text-[10px] leading-tight text-muted-foreground">
-                          {jd.id.slice(0, 8)}… · {new Date(jd.created_at).toLocaleString()}
-                        </span>
-                      </button>
-                      <div className="flex shrink-0 flex-row flex-wrap items-center gap-2 sm:justify-end">
-                        {!isActive ? (
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            disabled={!apiReady || noSession || activateBusyId === jd.id}
-                            onClick={() => void handleActivate(jd.id)}
-                          >
-                            {activateBusyId === jd.id ? "Setting…" : "Set active"}
-                          </Button>
-                        ) : (
-                          <span className="text-[11px] font-medium text-muted-foreground">Active for this chat</span>
+                    <div className="px-0.5 pb-2">
+                      <div
+                        role="row"
+                        data-state={isActive ? "selected" : undefined}
+                        className={cn(
+                          "flex min-h-11 w-full flex-col gap-2 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:gap-3",
+                          listRowClasses(isActive),
                         )}
-                        <Button type="button" variant="outline" size="sm" onClick={() => setViewJd(jd)}>
-                          View
-                        </Button>
+                      >
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 rounded-md -mx-1 px-1"
+                          aria-current={isActive ? "true" : undefined}
+                          onClick={() => setViewJd(jd)}
+                        >
+                          <span className="truncate text-sm font-medium leading-snug text-foreground">
+                            {previewLine(jd.raw_text)}
+                          </span>
+                          <span className="font-mono text-[10px] leading-tight text-muted-foreground">
+                            {jd.id.slice(0, 8)}… · {new Date(jd.created_at).toLocaleString()}
+                          </span>
+                        </button>
+                        <div className="flex shrink-0 flex-row flex-wrap items-center gap-2 sm:justify-end">
+                          {!isActive ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={!apiReady || noSession || activateBusyId === jd.id}
+                              onClick={() => void handleActivate(jd.id)}
+                            >
+                              {activateBusyId === jd.id ? "Setting…" : "Set active"}
+                            </Button>
+                          ) : (
+                            <span className="text-[11px] font-medium text-muted-foreground">Active for this chat</span>
+                          )}
+                          <Button type="button" variant="outline" size="sm" onClick={() => setViewJd(jd)}>
+                            View
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                }}
+              </VirtualList>
             )}
           </CardContent>
         </Card>
@@ -439,7 +433,9 @@ export function JobDescriptionsPage() {
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[min(60vh,420px)] rounded-md border border-border/60 bg-muted/10 p-3">
-            <pre className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">{viewJd?.raw_text}</pre>
+            <pre className="max-w-prose whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
+              {viewJd?.raw_text}
+            </pre>
           </ScrollArea>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setViewJd(null)}>

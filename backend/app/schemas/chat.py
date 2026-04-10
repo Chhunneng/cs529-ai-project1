@@ -4,15 +4,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class ChatMessageCreateRequest(BaseModel):
-    """Legacy shape; prefer :class:`SessionTurnCreateBody` for new clients."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    session_id: uuid.UUID
-    message: str
-
-
 class ChatMessageResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

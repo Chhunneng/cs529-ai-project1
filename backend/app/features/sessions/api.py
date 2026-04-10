@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from pathlib import Path
 from typing import List
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_session_or_404
@@ -16,7 +17,8 @@ from app.db.session import get_db_session
 from app.models.chat_session import ChatSession
 from app.models.pdf_artifact import PdfArtifact
 from app.schemas.chat import ChatMessageResponse
-from app.schemas.rest import SessionPatchRequest, SessionTurnCreateBody
+from app.schemas.rest import SessionPatchRequest, SessionMessageCreateBody
+from app.schemas.pagination import PaginatedSessionsResponse
 from app.schemas.session import SessionCreateResponse, SessionResponse
 from app.services.chat_reply_stream import stream_assistant_sse
 from app.services.session_messages import (
@@ -44,13 +46,15 @@ async def create_session(
     return SessionCreateResponse(id=session.id)
 
 
-@router.get("", response_model=List[SessionResponse])
+@router.get("", response_model=PaginatedSessionsResponse)
 async def list_sessions(
     db: AsyncSession = Depends(get_db_session),
-    limit: int = Query(default=200, ge=1, le=500),
-) -> List[SessionResponse]:
-    rows = await list_chat_sessions(db, limit=limit)
-    return rows
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PaginatedSessionsResponse:
+    total = int(await db.scalar(select(func.count()).select_from(ChatSession)) or 0)
+    rows = await list_chat_sessions(db, limit=limit, offset=offset)
+    return PaginatedSessionsResponse(items=list(rows), total=total)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -100,12 +104,16 @@ async def assistant_reply_stream(
 @router.get("/{session_id}/messages", response_model=List[ChatMessageResponse])
 async def list_session_messages(
     session: ChatSession = Depends(get_session_or_404),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=100, ge=1, le=200),
     before: datetime | None = Query(default=None),
+    anchor: Literal["start", "end"] = Query(
+        default="end",
+        description="With before unset: 'end' returns the newest messages; 'start' returns the oldest.",
+    ),
     db: AsyncSession = Depends(get_db_session),
 ) -> List[ChatMessageResponse]:
     return await list_messages_for_session(
-        db, session_id=session.id, limit=limit, before=before
+        db, session_id=session.id, limit=limit, before=before, anchor=anchor
     )
 
 
@@ -115,7 +123,7 @@ async def list_session_messages(
     status_code=status.HTTP_201_CREATED,
 )
 async def create_session_message(
-    body: SessionTurnCreateBody,
+    body: SessionMessageCreateBody,
     session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> ChatMessageResponse:

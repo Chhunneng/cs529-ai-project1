@@ -24,8 +24,18 @@ export function useTemplates(apiReady: boolean) {
     setError(null);
     setLoadingList(true);
     try {
-      const rows = await listResumeTemplates();
-      setItems(rows);
+      const pageSize = 200;
+      let offset = 0;
+      const all: ResumeTemplateListItem[] = [];
+      let total = 0;
+      for (;;) {
+        const page = await listResumeTemplates({ limit: pageSize, offset });
+        all.push(...page.items);
+        total = page.total;
+        offset += page.items.length;
+        if (page.items.length === 0 || all.length >= total) break;
+      }
+      setItems(all);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load templates.");
     } finally {

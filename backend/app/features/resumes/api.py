@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import uuid
-from typing import List
-
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import FileResponse
 
 from app.api.v1.deps import get_resume_or_404
 from app.db.session import get_db_session
 from app.models.resume import Resume
+from app.schemas.pagination import PaginatedResumesResponse
 from app.schemas.resume import ResumeListItem, ResumeUploadResponse
 from app.services.resume_uploads import (
     ResumeUploadError,
@@ -22,11 +21,29 @@ from app.services.resume_uploads import (
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
 
-@router.get("", response_model=List[ResumeListItem])
-async def list_resumes(db: AsyncSession = Depends(get_db_session)) -> List[ResumeListItem]:
-    result = await db.execute(select(Resume).order_by(Resume.created_at.desc()))
-    items = result.scalars().all()
-    return items
+@router.get("", response_model=PaginatedResumesResponse)
+async def list_resumes(
+    db: AsyncSession = Depends(get_db_session),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None, max_length=200),
+) -> PaginatedResumesResponse:
+    filters = []
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        filters.append(Resume.original_filename.ilike(term))
+
+    count_stmt = select(func.count()).select_from(Resume)
+    if filters:
+        count_stmt = count_stmt.where(*filters)
+    total = int(await db.scalar(count_stmt) or 0)
+
+    stmt = select(Resume).order_by(Resume.created_at.desc()).limit(limit).offset(offset)
+    if filters:
+        stmt = stmt.where(*filters)
+    result = await db.execute(stmt)
+    items = list(result.scalars().all())
+    return PaginatedResumesResponse(items=items, total=total)
 
 
 @router.post("", response_model=ResumeUploadResponse, status_code=status.HTTP_201_CREATED)

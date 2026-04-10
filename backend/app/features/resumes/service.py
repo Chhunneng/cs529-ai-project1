@@ -22,7 +22,7 @@ def resume_source_text(resume: Resume) -> str:
 
 
 def build_resume_overview_text(*, resume: Resume, max_chars: int) -> str:
-    """Short, tool-friendly summary: structured hints or start of plain text."""
+    # """Short, tool-friendly summary: structured hints or start of plain text."""
     parsed = resume.parsed_json
     if isinstance(parsed, dict) and parsed:
         lines: list[str] = []

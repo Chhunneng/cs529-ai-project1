@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.deps import get_job_description_or_404, get_session_or_404
@@ -9,6 +9,7 @@ from app.db.session import get_db_session
 from app.models.chat_session import ChatSession
 from app.models.job_description import JobDescription
 from app.schemas.job_description import JobDescriptionCreateBody, JobDescriptionResponse
+from app.schemas.pagination import PaginatedJobDescriptionsResponse
 
 router = APIRouter(tags=["job-descriptions"])
 
@@ -36,29 +37,41 @@ async def create_job_description(
 
 @router.get(
     "/sessions/{session_id}/job-descriptions",
-    response_model=list[JobDescriptionResponse],
+    response_model=PaginatedJobDescriptionsResponse,
 )
 async def list_job_descriptions_for_session(
     _session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
-    limit: int = Query(default=50, ge=1, le=200),
-) -> list[JobDescriptionResponse]:
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PaginatedJobDescriptionsResponse:
     """Same global list as ``GET /job-descriptions``; session path kept for compatible URLs."""
+    total = int(await db.scalar(select(func.count()).select_from(JobDescription)) or 0)
     result = await db.execute(
-        select(JobDescription).order_by(JobDescription.created_at.desc()).limit(limit)
+        select(JobDescription)
+        .order_by(JobDescription.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
-    return list(result.scalars().all())
+    items = list(result.scalars().all())
+    return PaginatedJobDescriptionsResponse(items=items, total=total)
 
 
-@router.get("/job-descriptions", response_model=list[JobDescriptionResponse])
+@router.get("/job-descriptions", response_model=PaginatedJobDescriptionsResponse)
 async def list_job_descriptions(
     db: AsyncSession = Depends(get_db_session),
-    limit: int = Query(default=50, ge=1, le=200),
-) -> list[JobDescriptionResponse]:
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> PaginatedJobDescriptionsResponse:
+    total = int(await db.scalar(select(func.count()).select_from(JobDescription)) or 0)
     result = await db.execute(
-        select(JobDescription).order_by(JobDescription.created_at.desc()).limit(limit)
+        select(JobDescription)
+        .order_by(JobDescription.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
-    return list(result.scalars().all())
+    items = list(result.scalars().all())
+    return PaginatedJobDescriptionsResponse(items=items, total=total)
 
 
 @router.get("/job-descriptions/{job_description_id}", response_model=JobDescriptionResponse)

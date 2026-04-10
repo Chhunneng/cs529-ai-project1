@@ -6,7 +6,7 @@ import { Loader2, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const MIN_INPUT_PX = 48;
+const MIN_INPUT_PX = 44;
 const MAX_INPUT_PX = 200;
 /** Treat as multi-line once content needs more than one row (avoids jitter from subpixel). */
 const MULTILINE_THRESHOLD_PX = MIN_INPUT_PX + 6;
@@ -15,10 +15,13 @@ export function ChatComposer({
   disabled,
   isSending,
   onSend,
+  contextHint,
 }: {
   disabled: boolean;
   isSending: boolean;
   onSend: (text: string) => Promise<void>;
+  /** Shown when send is blocked (e.g. missing session links); overrides the generic disabled line. */
+  contextHint?: string | null;
 }) {
   const [draft, setDraft] = useState("");
   const [multiline, setMultiline] = useState(false);
@@ -51,7 +54,7 @@ export function ChatComposer({
     <div className="flex flex-col gap-1.5">
       <div
         className={cn(
-          "flex w-full min-w-0 gap-1.5 rounded-2xl border border-border/50 bg-card px-2 py-2 shadow-md",
+          "flex w-full min-w-0 gap-1 rounded-2xl border border-border/50 bg-card px-1.5 py-1 shadow-md",
           multiline ? "items-end" : "items-center",
           "transition-[box-shadow,border-color] focus-within:border-ring/40 focus-within:ring-1 focus-within:ring-ring/30",
           disabled && "opacity-50",
@@ -65,8 +68,8 @@ export function ChatComposer({
           disabled={disabled}
           rows={1}
           className={cn(
-            "box-border min-h-[48px] w-full min-w-0 flex-1 resize-none",
-            "border-0 bg-transparent px-2 py-3",
+            "box-border min-h-[44px] w-full min-w-0 flex-1 resize-none",
+            "border-0 bg-transparent px-1.5 py-2",
             "text-[0.9375rem] leading-6 text-foreground outline-none ring-0",
             "placeholder:text-muted-foreground/70",
             "focus-visible:ring-0",
@@ -94,7 +97,9 @@ export function ChatComposer({
         </Button>
       </div>
 
-      {disabled ? (
+      {contextHint ? (
+        <p className="text-xs text-muted-foreground">{contextHint}</p>
+      ) : disabled ? (
         <p className="text-xs text-muted-foreground">Select a chat or wait until the API is ready.</p>
       ) : null}
     </div>

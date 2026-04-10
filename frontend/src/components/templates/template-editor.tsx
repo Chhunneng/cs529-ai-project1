@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,11 +28,13 @@ export function TemplateEditor({
   const [saving, setSaving] = useState(false);
 
   const loadedId = template?.id ?? null;
-  useMemo(() => {
+  useEffect(() => {
     if (!template) return;
     setName(template.name ?? "");
     setLatex(template.latex_source ?? "");
-  }, [loadedId]); // only reset editor when switching templates
+    // Intentionally only when the selected template id changes (not on every template object refresh).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync fields only when switching rows
+  }, [loadedId]);
 
   async function handleSave() {
     if (!template) return;

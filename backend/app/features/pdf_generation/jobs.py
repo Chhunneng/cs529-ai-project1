@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import uuid
-from pathlib import Path
 
 import structlog
 from sqlalchemy import func, select
 
-from app.core.config import settings
 from app.db.session import AsyncSessionMaker
 from app.features.latex.service import compile_latex_to_pdf
+from app.features.pdf_generation.pdf_artifacts import (
+    insert_pdf_artifact_row,
+    write_pdf_artifact_file,
+)
 from app.services.latex_compile import LaTeXCompileFailed
 from app.models.chat_message import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.job_description import JobDescription
-from app.models.pdf_artifact import PdfArtifact
 from app.llm.conversation_session import build_sqlalchemy_conversation_session
 from app.llm.intent import classify_intent
 from app.llm.resume_agent_context import ResumeAgentContext
@@ -114,111 +114,93 @@ async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
     log.info("job_received", type=job.type, session_id=str(session_id))
 
     message_id = uuid.UUID(job.user_message_id)
-    user_msg = await fetch_user_message_row(message_id=message_id)
-    if user_msg is None:
-        raise RuntimeError("User message not found")
+    user_message = await fetch_user_message_row(message_id=message_id)
 
-    if user_msg.session_id != session_id:
-        log.warn(
-            "session_id_mismatch",
-            job_session_id=str(session_id),
-            db_session_id=str(user_msg.session_id),
-        )
-        session_id = user_msg.session_id
-
-    user_text = user_msg.content
+    user_text = user_message.content
 
     async with AsyncSessionMaker() as db:
         session = await db.get(ChatSession, session_id)
         if session is None:
             raise RuntimeError("Session not found")
-        resume_id = uuid.UUID(job.resume_id) if job.resume_id is not None else session.resume_id
-        job_description_id = (
-            uuid.UUID(job.job_description_id)
-            if job.job_description_id is not None
-            else session.job_description_id
-        )
-        resume_template_id = (
-            uuid.UUID(job.resume_template_id)
-            if job.resume_template_id is not None
-            else session.resume_template_id
-        )
+        resume_id = uuid.UUID(job.resume_id) if job.resume_id is not None else None
+        job_description_id = uuid.UUID(job.job_description_id) if job.job_description_id is not None else None
+        resume_template_id = uuid.UUID(job.resume_template_id) if job.resume_template_id is not None else None
 
-    intent = await classify_intent(user_text=user_text)
+    # intent = await classify_intent(user_text=user_text)
 
-    if intent.intent == "job_description":
-        jd_id = await create_job_description_and_activate(session_id=session_id, raw_text=user_text)
-        assistant_text = (
-            "Saved that job description and set it as active for this session. "
-            f"Job description id: {jd_id}"
-        )
-        seq = await next_message_sequence(session_id=session_id)
-        assistant_id = await insert_assistant_message(
-            session_id=session_id,
-            content=assistant_text,
-            sequence=seq,
-            tool_used="internal.job_description_ingest",
-            pdf_artifact_id=None,
-        )
-        await publish_chat_reply(
-            user_message_id=message_id,
-            session_id=session_id,
-            assistant_message_id=assistant_id,
-            pdf_artifact_id=None,
-        )
-        return
+    # if intent.intent == "job_description":
+    #     jd_id = await create_job_description_and_activate(session_id=session_id, raw_text=user_text)
+    #     assistant_text = (
+    #         "Saved that job description and set it as active for this session. "
+    #         f"Job description id: {jd_id}"
+    #     )
+    #     seq = await next_message_sequence(session_id=session_id)
+    #     assistant_id = await insert_assistant_message(
+    #         session_id=session_id,
+    #         content=assistant_text,
+    #         sequence=seq,
+    #         tool_used="internal.job_description_ingest",
+    #         pdf_artifact_id=None,
+    #     )
+    #     await publish_chat_reply(
+    #         user_message_id=message_id,
+    #         session_id=session_id,
+    #         assistant_message_id=assistant_id,
+    #         pdf_artifact_id=None,
+    #     )
+    #     return
 
-    prior_for_scope = await _prior_assistant_snippet(
-        session_id=session_id,
-        before_sequence=user_msg.sequence,
-    )
-    scope = await check_resume_scope(user_text=user_text, prior_context=prior_for_scope)
+    # prior_for_scope = await _prior_assistant_snippet(
+    #     session_id=session_id,
+    #     before_sequence=user_message.sequence,
+    # )
+    # scope = await check_resume_scope(user_text=user_text, prior_context=prior_for_scope)
 
     seq = await next_message_sequence(session_id=session_id)
 
-    if not scope.is_related_to_resume_job:
-        assistant_text = (
-            "I'm only set up to help with resumes, job descriptions, and tailoring in this app. "
-            "Ask something in that area—like updating your resume, reviewing a job posting, "
-            "or matching your resume to a role."
-        )
-        assistant_id = await insert_assistant_message(
-            session_id=session_id,
-            content=assistant_text,
-            sequence=seq,
-            tool_used="scope_guardrail",
-            pdf_artifact_id=None,
-        )
-        await publish_chat_reply(
-            user_message_id=message_id,
-            session_id=session_id,
-            assistant_message_id=assistant_id,
-            pdf_artifact_id=None,
-        )
-        return
+    # if not scope.is_related_to_resume_job:
+    #     assistant_text = (
+    #         "I'm only set up to help with resumes, job descriptions, and tailoring in this app. "
+    #         "Ask something in that area—like updating your resume, reviewing a job posting, "
+    #         "or matching your resume to a role."
+    #     )
+    #     assistant_id = await insert_assistant_message(
+    #         session_id=session_id,
+    #         content=assistant_text,
+    #         sequence=seq,
+    #         tool_used="scope_guardrail",
+    #         pdf_artifact_id=None,
+    #     )
+    #     await publish_chat_reply(
+    #         user_message_id=message_id,
+    #         session_id=session_id,
+    #         assistant_message_id=assistant_id,
+    #         pdf_artifact_id=None,
+    #     )
+    #     return
 
-    if resume_template_id is None:
-        assistant_text = (
-            "Link a resume template to this session (or pass template_id with your message) "
-            "so I can generate a PDF."
-        )
-        assistant_id = await insert_assistant_message(
-            session_id=session_id,
-            content=assistant_text,
-            sequence=seq,
-            tool_used="server.validation",
-            pdf_artifact_id=None,
-        )
-        await publish_chat_reply(
-            user_message_id=message_id,
-            session_id=session_id,
-            assistant_message_id=assistant_id,
-            pdf_artifact_id=None,
-        )
-        return
+    # if resume_template_id is None:
+    #     assistant_text = (
+    #         "Link a resume template to this session (or pass template_id with your message) "
+    #         "so I can generate a PDF."
+    #     )
+    #     assistant_id = await insert_assistant_message(
+    #         session_id=session_id,
+    #         content=assistant_text,
+    #         sequence=seq,
+    #         tool_used="server.validation",
+    #         pdf_artifact_id=None,
+    #     )
+    #     await publish_chat_reply(
+    #         user_message_id=message_id,
+    #         session_id=session_id,
+    #         assistant_message_id=assistant_id,
+    #         pdf_artifact_id=None,
+    #     )
+    #     return
 
     memory_session = build_sqlalchemy_conversation_session(chat_session_id=session_id)
-    tool_ctx = ResumeAgentContext(
+    tool_context = ResumeAgentContext(
         chat_session_id=session_id,
         resume_id=resume_id,
         job_description_id=job_description_id,
@@ -226,9 +208,11 @@ async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
     )
     pdf_agent_result = await run_resume_pdf_agent(
         user_text=user_text,
-        tool_context=tool_ctx,
+        tool_context=tool_context,
         memory_session=memory_session,
     )
+
+    # log.info("pdf_agent_result", pdf_agent_result=pdf_agent_result)
 
     pdf_artifact_id: uuid.UUID | None = None
     assistant_text = pdf_agent_result.assistant_message
@@ -259,25 +243,8 @@ async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
                 "Try simplifying the layout or fixing LaTeX errors.)"
             )
         else:
-            artifact_id = uuid.uuid4()
-            rel_path = f"pdf-artifacts/{artifact_id}.pdf"
-            root = Path(settings.storage.artifacts_dir).resolve()
-            dest = (root / rel_path).resolve()
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(pdf_bytes)
-            sha = hashlib.sha256(pdf_bytes).hexdigest()
-            async with AsyncSessionMaker() as db:
-                db.add(
-                    PdfArtifact(
-                        id=artifact_id,
-                        session_id=session_id,
-                        storage_relpath=rel_path,
-                        mime_type="application/pdf",
-                        sha256_hex=sha,
-                    )
-                )
-                await db.commit()
-            pdf_artifact_id = artifact_id
+            written = write_pdf_artifact_file(pdf_bytes)
+            pdf_artifact_id = await insert_pdf_artifact_row(session_id, written)
 
     assistant_id = await insert_assistant_message(
         session_id=session_id,

@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ContextPanel } from "@/components/chat/context-panel";
 import { ChatThread } from "@/components/chat/chat-thread";
-import { ResumePdfPreview } from "@/components/chat/resume-pdf-preview";
 import { useChat } from "@/components/chat/use-chat";
 import { useChatWorkspace } from "@/components/chat/use-chat-workspace";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,7 +27,8 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import type { ChatMessage } from "@/components/chat/types";
 
 export function ChatShell() {
-  const { activeSessionId, sessions, retryConnection, isOffline, isReady } = useChatWorkspace();
+  const { activeSessionId, sessions, retryConnection, isOffline, isReady, upsertSession } =
+    useChatWorkspace();
   const showInlineContext = useMediaQuery("(min-width: 1024px)");
   const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
 
@@ -37,11 +37,16 @@ export function ChatShell() {
     [sessions, activeSessionId],
   );
 
-  const { messages, isSending, canSend, sendMessage, latestPdfUrl } = useChat(
-    activeSessionId,
-    isOffline,
-    sessionRow,
-  );
+  const {
+    messages,
+    isSending,
+    canSend,
+    sendMessage,
+    contextHint,
+    loadOlderMessages,
+    hasOlderMessages,
+    loadingOlder,
+  } = useChat(activeSessionId, isOffline, sessionRow);
 
   const apiOk = isReady && !isOffline;
 
@@ -53,8 +58,8 @@ export function ChatShell() {
             <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">Chat</h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
               {showInlineContext
-                ? "PDF preview on the left; chat on the right. Use Session tools to link resume, job, and template."
-                : "PDF preview stacks above chat on small screens. Use Session tools to link resume, job, and template."}
+                ? "Session tools are on the right — link your resume, job description, and template, then chat. Generate or open PDFs from there."
+                : "Open Session tools from the header to link your resume, job description, and template, then chat. Generate or open PDFs from there."}
             </p>
           </div>
           {!showInlineContext ? (
@@ -84,6 +89,7 @@ export function ChatShell() {
                     sessionId={activeSessionId}
                     apiReady={apiOk}
                     variant="embedded"
+                    onSessionSynced={upsertSession}
                   />
                 </div>
               </SheetContent>
@@ -107,43 +113,29 @@ export function ChatShell() {
         ) : null}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 md:flex-row md:gap-0 md:p-2">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:hidden">
-          <ResumePdfPreview pdfUrl={latestPdfUrl} />
-          <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col">
-            <ChatColumn
-              activeSessionId={activeSessionId}
-              isOffline={isOffline}
-              messages={messages}
-              isSending={isSending}
-              canSend={canSend}
-              sendMessage={sendMessage}
-            />
-          </div>
-        </div>
-
-        <div className="hidden min-h-0 min-w-0 flex-1 md:flex">
-          {/* Flex split (no extra deps) — avoids stale Docker named volumes missing react-resizable-panels */}
-          <div className="flex min-h-[420px] min-w-0 flex-1 rounded-lg border border-border/50">
-            <div className="flex min-h-0 min-w-0 flex-[11] flex-col p-2">
-              <ResumePdfPreview pdfUrl={latestPdfUrl} />
-            </div>
-            <div className="w-px shrink-0 bg-border/80" aria-hidden />
-            <div className="flex min-h-0 min-w-0 flex-[14] flex-col p-2">
-              <ChatColumn
-                activeSessionId={activeSessionId}
-                isOffline={isOffline}
-                messages={messages}
-                isSending={isSending}
-                canSend={canSend}
-                sendMessage={sendMessage}
-              />
-            </div>
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pt-2 pb-2 md:flex-row md:gap-0 md:px-2 md:pt-2 md:pb-2">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:min-h-[420px] md:rounded-lg md:px-2 md:pt-2 md:pb-0">
+          <ChatColumn
+            activeSessionId={activeSessionId}
+            isOffline={isOffline}
+            messages={messages}
+            isSending={isSending}
+            canSend={canSend}
+            sendMessage={sendMessage}
+            contextHint={contextHint}
+            loadOlderMessages={loadOlderMessages}
+            hasOlderMessages={hasOlderMessages}
+            loadingOlder={loadingOlder}
+          />
         </div>
 
         {showInlineContext ? (
-          <ContextPanel sessionId={activeSessionId} apiReady={apiOk} variant="sidebar" />
+          <ContextPanel
+            sessionId={activeSessionId}
+            apiReady={apiOk}
+            variant="sidebar"
+            onSessionSynced={upsertSession}
+          />
         ) : null}
       </div>
     </main>
@@ -157,6 +149,10 @@ function ChatColumn({
   isSending,
   canSend,
   sendMessage,
+  contextHint,
+  loadOlderMessages,
+  hasOlderMessages,
+  loadingOlder,
 }: {
   activeSessionId: string | null;
   isOffline: boolean;
@@ -164,10 +160,14 @@ function ChatColumn({
   isSending: boolean;
   canSend: boolean;
   sendMessage: (t: string) => Promise<void>;
+  contextHint: string | null;
+  loadOlderMessages: () => Promise<void>;
+  hasOlderMessages: boolean;
+  loadingOlder: boolean;
 }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex min-h-0 min-w-0 w-full max-w-3xl flex-1 flex-col gap-2">
+      <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2">
         {!activeSessionId && !isOffline ? (
           <Empty className="min-h-[200px] border-none bg-transparent py-8">
             <EmptyHeader>
@@ -178,7 +178,13 @@ function ChatColumn({
             </EmptyHeader>
           </Empty>
         ) : activeSessionId ? (
-          <ChatThread messages={messages} isSending={isSending} />
+          <ChatThread
+            messages={messages}
+            isSending={isSending}
+            hasOlderMessages={hasOlderMessages}
+            loadingOlder={loadingOlder}
+            onLoadOlder={loadOlderMessages}
+          />
         ) : (
           <Empty className="min-h-[200px] border-none bg-transparent py-8">
             <EmptyHeader>
@@ -188,7 +194,12 @@ function ChatColumn({
           </Empty>
         )}
         <Separator className="bg-border/50" />
-        <ChatComposer disabled={!canSend} isSending={isSending} onSend={sendMessage} />
+        <ChatComposer
+          disabled={!canSend}
+          isSending={isSending}
+          onSend={sendMessage}
+          contextHint={contextHint}
+        />
       </div>
     </div>
   );

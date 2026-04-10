@@ -3,9 +3,9 @@ from __future__ import annotations
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 from app.api.v1.deps import get_resume_template_or_404
@@ -16,6 +16,7 @@ from app.features.resume_templates.service import (
     stream_generate_latex_from_requirements_sse,
     validate_resume_template_latex as run_validate_resume_template_latex,
 )
+from app.schemas.pagination import PaginatedResumeTemplatesResponse
 from app.schemas.resume_template import (
     ResumeTemplateCreateBody,
     ResumeTemplateDetail,
@@ -49,13 +50,29 @@ async def _require_compilable_latex(*, latex_source: str) -> None:
         )
 
 
-@router.get("", response_model=List[ResumeTemplateListItem])
+@router.get("", response_model=PaginatedResumeTemplatesResponse)
 async def list_resume_templates(
     db: AsyncSession = Depends(get_db_session),
-) -> list[ResumeTemplateListItem]:
-    result = await db.execute(select(ResumeTemplate).order_by(ResumeTemplate.created_at.desc()))
-    resume_templates = result.scalars().all()
-    return resume_templates
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None, max_length=200),
+) -> PaginatedResumeTemplatesResponse:
+    filters = []
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        filters.append(ResumeTemplate.name.ilike(term))
+
+    count_stmt = select(func.count()).select_from(ResumeTemplate)
+    if filters:
+        count_stmt = count_stmt.where(*filters)
+    total = int(await db.scalar(count_stmt) or 0)
+
+    stmt = select(ResumeTemplate).order_by(ResumeTemplate.created_at.desc()).limit(limit).offset(offset)
+    if filters:
+        stmt = stmt.where(*filters)
+    result = await db.execute(stmt)
+    items = list(result.scalars().all())
+    return PaginatedResumeTemplatesResponse(items=items, total=total)
 
 
 @router.post("", response_model=ResumeTemplateDetail, status_code=status.HTTP_201_CREATED)

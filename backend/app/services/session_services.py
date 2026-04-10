@@ -23,9 +23,12 @@ async def create_chat_session(db: AsyncSession) -> ChatSession:
     return session
 
 
-async def list_chat_sessions(db: AsyncSession, *, limit: int) -> Sequence[ChatSession]:
+async def list_chat_sessions(db: AsyncSession, *, limit: int, offset: int = 0) -> Sequence[ChatSession]:
     result = await db.execute(
-        select(ChatSession).order_by(ChatSession.updated_at.desc()).limit(limit)
+        select(ChatSession)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return result.scalars().all()
 

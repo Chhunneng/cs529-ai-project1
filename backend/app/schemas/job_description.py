@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class JobDescriptionCreateBody(BaseModel):
@@ -10,6 +10,8 @@ class JobDescriptionCreateBody(BaseModel):
 
 
 class JobDescriptionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     raw_text: str
     extracted_json: dict | None

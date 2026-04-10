@@ -11,7 +11,7 @@ from app.db.session import get_db_session
 from app.models.chat_session import ChatSession
 from app.models.resume_output import ResumeOutput
 from app.schemas.resume_output import ResumeOutputCreateBody, ResumeOutputResponse
-from app.services.resume_output_jobs import create_resume_output_and_enqueue
+from app.features.resume_outputs.service import create_resume_output_and_enqueue
 
 router = APIRouter(tags=["resume-outputs"])
 

@@ -13,7 +13,7 @@ from app.llm.agents import LATEX_RESUME_FIX_AGENT, LATEX_RESUME_SAMPLE_WRITER_AG
 from app.llm.agents_bootstrap import ONESHOT_AGENT_MAX_TURNS
 from app.llm.schema import LatexResumeSampleOutput
 from app.schemas.resume_template import ResumeTemplateValidateResponse
-from app.services.resume_template_services import validate_template_latex
+from app.features.resume_templates.latex_preview import validate_template_latex
 
 log = structlog.get_logger()
 

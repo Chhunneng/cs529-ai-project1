@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionMaker
 from app.models.chat_message import ChatMessage
-from app.services.chat_reply_notify import chat_reply_channel
-from app.services.queue import get_redis_client
-from app.services.session_messages import chat_message_to_response
+from app.features.job_queue.redis import get_redis_client
+from app.features.sessions.chat_messages import chat_message_to_response
+from app.features.sessions.chat_reply_redis import chat_reply_channel
 
 log = structlog.get_logger()
 

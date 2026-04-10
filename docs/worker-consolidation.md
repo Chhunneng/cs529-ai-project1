@@ -9,8 +9,8 @@ rg 'queue:agent-jobs' backend/
 rg 'CHAT_REPLY_CHANNEL_PREFIX|chat:reply:' backend/
 ```
 
-- Queue key: `app.core.config.Settings.queue_key` (default `queue:agent-jobs`) and `app.services.queue` use the same value.
-- SSE notify: `app.services.chat_reply_notify` defines `chat_reply_channel` and `publish_chat_reply`.
+- Queue key: `app.core.config.Settings.queue_key` (default `queue:agent-jobs`) and `app.features.job_queue.redis` use the same value.
+- SSE notify: `app.features.sessions.chat_reply_redis` defines `chat_reply_channel` and `publish_chat_reply`.
 
 ## Environment variables (worker process)
 

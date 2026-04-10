@@ -26,7 +26,7 @@ from app.schemas.resume_template import (
     ResumeTemplateValidateResponse,
 )
 from app.features.latex.exceptions import LaTeXCompileFailed
-from app.services.resume_template_services import build_template_preview_pdf, validate_template_latex
+from app.features.resume_templates.latex_preview import build_template_preview_pdf, validate_template_latex
 
 router = APIRouter(prefix="/resume-templates", tags=["resume-templates"])
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from app.features.job_descriptions.repo import load_job_description_row
+from app.features.job_descriptions.repositories import load_job_description_row
 
 
 def _clip(text: str, limit: int) -> str:

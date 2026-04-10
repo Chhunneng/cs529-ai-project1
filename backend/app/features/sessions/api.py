@@ -20,13 +20,13 @@ from app.schemas.chat import ChatMessageResponse
 from app.schemas.rest import SessionPatchRequest, SessionMessageCreateBody
 from app.schemas.pagination import PaginatedSessionsResponse
 from app.schemas.session import SessionCreateResponse, SessionResponse
-from app.services.chat_reply_stream import stream_assistant_sse
-from app.services.session_messages import (
+from app.features.sessions.assistant_sse import stream_assistant_sse
+from app.features.sessions.chat_messages import (
     create_session_turn_and_enqueue,
     delete_chat_message_for_session,
     list_messages_for_session,
 )
-from app.services.session_services import (
+from app.features.sessions.service import (
     create_chat_session,
     delete_session_by_id,
     list_chat_sessions,

@@ -1,4 +1,4 @@
-"""Resume template persistence helpers (preview compile, etc.)."""
+"""Resume template LaTeX validate and preview PDF bytes (no DB)."""
 
 from __future__ import annotations
 

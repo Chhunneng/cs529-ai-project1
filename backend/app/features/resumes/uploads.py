@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.resume import Resume
 from app.queue_jobs import ParseResumeJob
-from app.services.queue import enqueue_job
+from app.features.job_queue.redis import enqueue_job
 
 log = structlog.get_logger()
 

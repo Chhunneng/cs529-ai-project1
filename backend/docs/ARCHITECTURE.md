@@ -23,7 +23,7 @@ This service is a **FastAPI** app that:
 | **Repositories** | [`backend/app/features/*/repo.py`](../app/features/) | Database reads/writes for that feature. |
 | **Domain/formatting** | [`backend/app/features/*/service.py`](../app/features/) | Pure or DB-backed helpers (e.g. resume text overview). |
 | **Integrations** | [`backend/app/llm/`](../app/llm/) (OpenAI Agents SDK + client wrappers; not the PyPI `openai` package), [`backend/app/features/latex/service.py`](../app/features/latex/service.py) | External systems (OpenAI API, pdflatex). |
-| **Legacy/shared services** | [`backend/app/services/`](../app/services/) | Queue, uploads, streaming, session helpers still used by features. |
+| **Job queue (Redis list)** | [`backend/app/features/job_queue/redis.py`](../app/features/job_queue/redis.py) | `enqueue_job` / `dequeue_job` + shared Redis client URL from settings. |
 | **DTOs** | [`backend/app/schemas/`](../app/schemas/) | Pydantic request/response models. |
 | **ORM** | [`backend/app/models/`](../app/models/) | SQLAlchemy tables. |
 | **Infrastructure** | [`backend/app/core/`](../app/core/), [`backend/app/db/`](../app/db/) | Config, logging, errors, engine/sessions. |
@@ -32,20 +32,20 @@ This service is a **FastAPI** app that:
 
 **Intended dependency direction** (see also [`backend/app/features/README.md`](../app/features/README.md)):
 
-- `features/*/api.py` → `services/*` or `features/*/repo.py` / `features/*/service.py`
+- `features/*/api.py` → `features/*/service.py`, `features/*/repo.py`, or sibling modules (e.g. `sessions/chat_messages.py`).
 - `features/*/jobs.py` → DB, OpenAI, queue notify, render pipeline
-- Avoid **services importing worker** and **worker importing services** in new code; LaTeX compile is centralized in `features/latex/service.py`.
+- Avoid **feature code importing worker** and **worker importing high-level APIs** in new code; LaTeX compile is centralized in `features/latex/service.py`.
 
 ## Features (by folder)
 
 | Feature | HTTP (`features/.../api.py`) | Background jobs | Other |
 |---------|------------------------------|-----------------|--------|
-| **Sessions** | CRUD chat sessions, list messages, `POST .../messages`, PDF download, DELETE message, SSE stream | — | [`session_services.py`](../app/services/session_services.py), [`session_messages.py`](../app/services/session_messages.py) |
+| **Sessions** | CRUD chat sessions, list messages, `POST .../messages`, PDF download, DELETE message, SSE stream | — | [`sessions/service.py`](../app/features/sessions/service.py), [`sessions/chat_messages.py`](../app/features/sessions/chat_messages.py), [`sessions/assistant_sse.py`](../app/features/sessions/assistant_sse.py) |
 | **PDF agent chat** | (via sessions routes) | [`pdf_generation/jobs.py`](../app/features/pdf_generation/jobs.py) — agent + LaTeX + `pdf_artifacts` | OpenAI Agents SDK + [`SQLAlchemySession`](../app/llm/conversation_session.py), intent, scope |
-| **Resumes** | List/upload/download/delete | [`resumes/jobs.py`](../app/features/resumes/jobs.py) — parse text to `parsed_json` | [`resumes/repo.py`](../app/features/resumes/repo.py), [`resumes/service.py`](../app/features/resumes/service.py) for tool context |
+| **Resumes** | List/upload/download/delete | [`resumes/jobs.py`](../app/features/resumes/jobs.py) — parse text to `parsed_json` | [`resumes/repo.py`](../app/features/resumes/repo.py), [`resumes/service.py`](../app/features/resumes/service.py), [`resumes/uploads.py`](../app/features/resumes/uploads.py) |
 | **Job descriptions** | CRUD-style routes under `/sessions/...` and `/job-descriptions` | (ingest also via chat job path) | [`job_descriptions/repo.py`](../app/features/job_descriptions/repo.py), [`job_descriptions/service.py`](../app/features/job_descriptions/service.py) |
-| **Resume templates** | CRUD + preview PDF | — | Preview uses [`resume_template_services.py`](../app/services/resume_template_services.py) → LaTeX |
-| **Resume outputs** | Create output + download PDF | [`resume_outputs/jobs.py`](../app/features/resume_outputs/jobs.py) → [`render_resume.py`](../app/worker/render_resume.py) | Enqueue from [`resume_output_jobs.py`](../app/services/resume_output_jobs.py) |
+| **Resume templates** | CRUD + preview PDF | — | Preview uses [`resume_templates/latex_preview.py`](../app/features/resume_templates/latex_preview.py) → LaTeX |
+| **Resume outputs** | Create output + download PDF | [`resume_outputs/jobs.py`](../app/features/resume_outputs/jobs.py) → [`render_resume.py`](../app/worker/render_resume.py) | Enqueue from [`resume_outputs/service.py`](../app/features/resume_outputs/service.py) |
 | **LaTeX** | Internal compile: [`internal_latex.py`](../app/api/v1/routes/internal_latex.py) | Used by render + preview | [`features/latex/service.py`](../app/features/latex/service.py) |
 
 ## Request flow (HTTP)
@@ -57,16 +57,16 @@ flowchart LR
   v1router[api_v1_router]
   shim[routes_shim]
   featApi[features_star_api]
-  services[services_legacy]
+  featSvc[features_star_service]
   db[(PostgreSQL)]
 
   client --> main
   main --> v1router
   v1router --> shim
   shim --> featApi
-  featApi --> services
+  featApi --> featSvc
   featApi --> db
-  services --> db
+  featSvc --> db
 ```
 
 ## Chat turn flow (user message → PDF agent → assistant reply)
@@ -75,7 +75,7 @@ flowchart LR
 sequenceDiagram
   participant Client
   participant API as sessions_api
-  participant SM as session_messages
+  participant SM as chat_messages
   participant Redis as Redis_queue
   participant Worker as worker_runner
   participant Dispatch as worker_jobs_dispatch
@@ -98,7 +98,7 @@ sequenceDiagram
   Job->>Redis_or_pub: notify SSE subscribers
 ```
 
-Exact notify path: [`chat_reply_notify.py`](../app/services/chat_reply_notify.py) (Redis pub/sub for SSE).
+Exact notify path: [`chat_reply_redis.py`](../app/features/sessions/chat_reply_redis.py) (Redis pub/sub for SSE).
 
 ## Job queue flow (all job types)
 
@@ -111,7 +111,7 @@ Job payloads are defined in [`queue_jobs/payloads.py`](../app/queue_jobs/payload
 ```mermaid
 flowchart TB
   subgraph apiLayer [API]
-    enqueue[enqueue_job in services_queue]
+    enqueue[enqueue_job in job_queue_redis]
   end
   subgraph redisLayer [Redis]
     q[Job queue]

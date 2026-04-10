@@ -3,7 +3,7 @@ import uuid
 
 import structlog
 
-from app.services.queue import get_redis_client
+from app.features.job_queue.redis import get_redis_client
 
 log = structlog.get_logger()
 

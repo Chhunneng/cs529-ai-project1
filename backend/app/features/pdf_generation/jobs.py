@@ -19,7 +19,7 @@ from app.llm.conversation_session import build_sqlalchemy_conversation_session
 from app.llm.context import ResumeAgentContext
 from app.llm.resume_chat_agent import run_resume_pdf_agent
 from app.queue_jobs import ResumePdfGenerationJob
-from app.services.chat_reply_notify import publish_chat_reply
+from app.features.sessions.chat_reply_redis import publish_chat_reply
 
 log = structlog.get_logger()
 

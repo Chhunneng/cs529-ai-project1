@@ -6,7 +6,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.db.session import engine
-from app.services.queue import dequeue_job
+from app.features.job_queue.redis import dequeue_job
 from app.worker.jobs import handle_job
 
 log = structlog.get_logger()

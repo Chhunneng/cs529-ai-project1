@@ -11,7 +11,7 @@ from app.db.session import get_db_session
 from app.models.resume import Resume
 from app.schemas.pagination import PaginatedResumesResponse
 from app.schemas.resume import ResumeListItem, ResumeUploadResponse
-from app.services.resume_uploads import (
+from app.features.resumes.uploads import (
     ResumeUploadError,
     absolute_upload_path,
     create_resume_from_upload,

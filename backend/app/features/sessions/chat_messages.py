@@ -13,8 +13,8 @@ from app.models.chat_message import ChatMessage
 from app.models.pdf_artifact import PdfArtifact
 from app.queue_jobs import ResumePdfGenerationJob
 from app.schemas.chat import ChatMessageResponse
-from app.services.agents_sdk_trim import delete_agents_sdk_messages_from_cutoff
-from app.services.queue import enqueue_job
+from app.features.job_queue.redis import enqueue_job
+from app.features.sessions.agents_sdk_trim import delete_agents_sdk_messages_from_cutoff
 
 log = structlog.get_logger()
 

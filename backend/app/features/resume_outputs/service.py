@@ -8,7 +8,7 @@ from app.models.chat_session import ChatSession
 from app.queue_jobs import RenderResumeJob
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
-from app.services.queue import enqueue_job
+from app.features.job_queue.redis import enqueue_job
 
 log = structlog.get_logger()
 

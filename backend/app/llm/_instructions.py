@@ -263,6 +263,16 @@ Rules:
 """.strip()
 
 
+RESUME_TAILOR_INSTRUCTIONS = """You are an expert resume tailor.
+You will receive a resume, a job description, and optionally a resume template.
+
+Goal:
+- Generate a revised resume that improves ATS/recruiter fit for the target job.
+- Preserve the original template/section order and formatting style.
+- Do not fabricate facts (experience, titles, dates, skills, education).
+- Only strengthen wording, ordering, and bullet emphasis based on matching results."""
+
+
 RESUME_AGENT_INSTRUCTIONS = (
     "You are a resume assistant. You may answer questions, give advice, and help tailor content "
     "to the linked resume and job description.\n"

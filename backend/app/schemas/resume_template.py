@@ -43,12 +43,12 @@ class ResumeTemplateGenerateResponse(BaseModel):
 
 
 class ResumeTemplateFixBody(BaseModel):
-    latex_source: str = Field(..., min_length=100, max_length=5000, strip_whitespace=True)
-    error_message: str = Field(..., min_length=10, max_length=5000, strip_whitespace=True)
+    latex_source: str = Field(..., min_length=100, strip_whitespace=True)
+    error_message: str = Field(..., min_length=100, strip_whitespace=True)
 
 
 class ResumeTemplateValidateBody(BaseModel):
-    latex_source: str = Field(..., min_length=1, max_length=5000, strip_whitespace=True)
+    latex_source: str = Field(..., min_length=100, strip_whitespace=True)
 
 
 class ResumeTemplateValidateResponse(BaseModel):

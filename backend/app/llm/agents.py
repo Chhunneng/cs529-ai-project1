@@ -29,6 +29,10 @@ LATEX_RESUME_SAMPLE_WRITER_AGENT = Agent(
     instructions=LATEX_RESUME_SAMPLE_WRITER_INSTRUCTIONS,
     model="gpt-5-nano",
     output_type=LatexResumeSampleOutput,
+    model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
+    tools=[
+        check_latex_compiles_on_server,
+    ],
 )
 
 
@@ -37,6 +41,10 @@ LATEX_RESUME_FIX_AGENT = Agent(
     instructions=LATEX_RESUME_FIX_INSTRUCTIONS,
     model="gpt-5-nano",
     output_type=LatexResumeSampleOutput,
+    model_settings=ModelSettings(reasoning=Reasoning(effort="high")),
+    tools=[
+        check_latex_compiles_on_server,
+    ],
 )
 
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agents.model_settings import ModelSettings
+from openai.types.shared import Reasoning
 import structlog
 from agents import Agent, Runner
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,15 +66,12 @@ def _resume_extract_agent() -> Agent[Any]:
         name="ResumeProfileExtract",
         instructions=_RESUME_EXTRACT_INSTRUCTIONS,
         model=settings.openai.model,
+        model_settings=ModelSettings(
+            reasoning=Reasoning(effort="medium")
+        ),
         output_type=ResumeProfileV1,
         tools=[],
     )
-
-
-def _truncate_for_model(text: str, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    return text[:limit].rstrip() + "\n\n[…truncated for model input…]"
 
 
 def _user_message_for_extract(truncated_resume: str) -> str:
@@ -94,7 +93,7 @@ def _user_message_for_extract(truncated_resume: str) -> str:
             "EXPERIENCE (under an Experience depth-0 heading):",
             "- For each employer/role block, use this pattern so readers see one coherent job:",
             "  • depth 1: ONE line that already includes job title, company, location, and date range, e.g. "
-            "\"Software Engineer — Kirirom Digital Inc — Japan — May 2023 – Jan 2026\".",
+            "\"Software Engineer — Company Name Inc — USA — May 2023 – Jan 2026\".",
             "  • Then depth 3 only for bullet achievements (one bullet = one outline row).",
             "- Do NOT add a separate depth-2 row that only repeats the job title if it is already in the depth-1 line.",
             "- If the source resume splits title and company on different lines, you may use depth 1 = company + dates + location "
@@ -125,7 +124,6 @@ def _user_message_for_extract(truncated_resume: str) -> str:
             "sections_flat: [] unless a block truly cannot be represented; then one {title, content} per odd block.",
             "",
             "Use `_schema_version`: 1.",
-            "If the text was truncated, work from what is present.",
             "--- Resume text ---",
             truncated_resume,
         ]
@@ -139,15 +137,11 @@ async def extract_resume_profile_json(*, resume_text: str) -> dict[str, Any]:
     if not raw:
         raise ValueError("resume_text is empty")
 
-    truncated = _truncate_for_model(raw, settings.openai.resume_extract_max_input_chars)
-    ensure_agents_openai_configured()
-    user_message = _user_message_for_extract(truncated)
+    user_message = _user_message_for_extract(raw)
 
     result = await Runner.run(
         _resume_extract_agent(),
         user_message,
-        context=None,
-        session=None,
         max_turns=ONESHOT_AGENT_MAX_TURNS,
     )
     final = result.final_output

@@ -16,9 +16,6 @@ log = structlog.get_logger()
 async def handle_parse_resume_job(job: ParseResumeJob) -> None:
     resume_id = uuid.UUID(job.resume_id)
     log.info("parse_resume_start", resume_id=str(resume_id))
-    if not settings.openai.api_key:
-        log.warn("parse_resume_skipped_no_api_key", resume_id=str(resume_id))
-        return
 
     async with AsyncSessionMaker() as db:
         r = await db.get(Resume, resume_id)

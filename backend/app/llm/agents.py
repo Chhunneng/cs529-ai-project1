@@ -2,6 +2,7 @@ from agents import Agent, ModelSettings
 from openai.types.shared import Reasoning
 
 from app.llm.schema import (
+    JobDescriptionParserOutput,
     LatexResumeSampleOutput,
     ResumeFillAtsV1,
     ResumePdfMessageOutput,
@@ -17,6 +18,7 @@ from app.llm.tools import (
 )
 
 from app.llm._instructions import (
+    JOB_DESCRIPTION_PARSER_INSTRUCTIONS,
     LATEX_RESUME_FIX_INSTRUCTIONS,
     LATEX_RESUME_SAMPLE_WRITER_INSTRUCTIONS,
     RESUME_AGENT_INSTRUCTIONS,
@@ -54,6 +56,18 @@ RESUME_EXTRACT_AGENT = Agent(
     model="gpt-5-nano",
     model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
     output_type=ResumeProfileV1,
+)
+
+
+JOB_DESCRIPTION_PARSER_AGENT = Agent(
+    name="Job Description Parser Agent",
+    instructions=JOB_DESCRIPTION_PARSER_INSTRUCTIONS,
+    model="gpt-5-nano",
+    output_type=JobDescriptionParserOutput,
+    model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
+    tools=[
+        get_active_job_description,
+    ],
 )
 
 

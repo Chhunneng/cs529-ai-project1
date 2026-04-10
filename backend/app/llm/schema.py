@@ -46,6 +46,21 @@ class ResumeProfileV1(BaseModel):
     sections_flat: list[ResumeProfileSectionFlat]
 
 
+class JobDescriptionParserOutput(BaseModel):
+    """Plain-text extraction from a job description: one string with labeled sections, not JSON arrays."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    details: str = Field(
+        ...,
+        description=(
+            "Plain text only. Use exactly three sections in order, each on its own line as a header, "
+            "then bullet lines (leading '- '). Sections: Keywords:, Skills:, Requirements:. "
+            "No markdown code fences, no long paragraphs, no nested JSON or list syntax in the string."
+        ),
+    )
+
+
 class ResumePdfMessageOutput(BaseModel):
     """Structured final output: user-facing text plus LaTeX source for PDF compilation."""
 

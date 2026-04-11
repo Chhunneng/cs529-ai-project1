@@ -9,7 +9,7 @@ from app.features.resumes.service import (
     resume_source_text,
     search_resume_text,
 )
-from app.features.job_descriptions.service import fetch_full_job_description_text, fetch_job_description_excerpt
+from app.features.job_descriptions.service import fetch_full_job_description_text
 from app.features.latex.service import compile_latex_to_pdf
 from app.llm.context import JobDescriptionAgentContext, ResumeAgentContext, ToolTraceContext
 from app.core.config import settings

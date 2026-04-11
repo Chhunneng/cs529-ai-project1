@@ -1,88 +1,116 @@
-# UI wireframes & critical flows (Phase 0)
+# UI map and flows
 
-Living reference for the large-data UI refactor. Layout intent only.
+High-level map of the **Next.js** app: primary routes match [`frontend/src/components/layout/app-nav.ts`](../frontend/src/components/layout/app-nav.ts). Layout intent only (not pixel-perfect). To run the stack locally, see [README.md](../README.md).
+
+## Routes (sidebar)
+
+| Label (UI) | Path |
+|------------|------|
+| Chat | `/` |
+| Resumes | `/resumes` |
+| Jobs | `/job-descriptions` |
+| Templates | `/templates` |
+| PDF exports | `/outputs` |
 
 ## Critical flows
 
-1. **New chat** → Session tools: resume, JD, template → send message.
-2. **Upload resume** → appears in library / picker.
-3. **Templates** → pick in library → edit LaTeX → save.
-4. **Outputs** → pick session (and optional resume) → generate PDF → download.
-5. **Job postings** → paste → save → activate for session.
+1. **Chat**: Open or create a session from the sidebar → optional **Resume**, **Job**, **Template** picks in the context panel → type message → **Send** → assistant streams over **SSE**; PDF preview updates when an artifact exists.
+2. **Resumes**: **Upload** a file → row appears in the list → open/download; parsing runs in the background until `parsed_json` is ready.
+3. **Jobs**: **Paste** (or add) a job description → save to the shared library → in **Chat**, pick that job or **Activate** from a session-scoped flow so the session uses it.
+4. **Templates**: Browse library → **New** or select a row → edit LaTeX → **Save**; **Preview** compiles via the backend.
+5. **PDF exports**: Choose **session** (optional), **resume**, **template** → **Generate** → wait for status → **Download** when the worker has produced the PDF.
 
-## Chat — sidebar “Recent chats”
+## Chat — shell
+
+The chat experience uses a full-height shell ([`AppShell`](../frontend/src/components/chat/app-shell.tsx)): **sidebar** (sessions) + **main** (thread + composer) + **context** strip/panel for resources; mobile uses a bottom nav for primary routes.
+
+```text
+┌──────────────┬──────────────────────────────────────────┐
+│ Sidebar      │  Main column                             │
+│ (sessions)   │  [Context: Resume | Jobs | Template]      │
+│              ├──────────────────────────────────────────┤
+│ [New chat]   │  PDF preview (when artifact) + thread    │
+│ [Search…]    │  [Load older] … messages …               │
+│  rows…       ├──────────────────────────────────────────┤
+│ [Load more]  │  Composer + Send                         │
+└──────────────┴──────────────────────────────────────────┘
+```
+
+## Chat — session list (sidebar)
 
 ```text
 ┌─────────────────────────────┐
-│ [Search chats…]              │
+│ [New chat]                   │
+│ [Search sessions…]           │
 ├─────────────────────────────┤
-│ ┌─ session row ─────────────┐ │
-│ │ id + updated time         │ │
-│ └──────────────────────────┘ │
-│   … paginated / virtualized … │
-│ [Load more]                   │
+│  session row (title / time)   │
+│  … virtualized …             │
+│ [Load more]                  │
 └─────────────────────────────┘
 ```
 
-## Chat — context panel (Resume / JD / Template)
+## Chat — context panel (Resume / Jobs / Template)
 
 ```text
-┌ Section title ─────── [Action] ┐
-│ Short description               │
+┌ Section title ─────── [action] ┐
+│ Short hint text                 │
 ├─────────────────────────────────┤
-│ [Combobox: type to filter ▼]    │
-│ Recent — compact rows           │
+│ [Searchable combobox ▼]         │
+│ Recent items as compact rows    │
 └─────────────────────────────────┘
 ```
 
-## Chat — main thread
+## Chat — message thread + composer
 
 ```text
 ┌────────────────────────────────┐
 │ [Load older messages]           │
-│  … bubbles …                    │
+│  user / assistant bubbles       │
 ├────────────────────────────────┤
-│ Composer                        │
+│  Composer + Send                 │
 └────────────────────────────────┘
 ```
 
-## Resumes page
+## Resumes (`/resumes`)
 
 ```text
 ┌ Resumes ───────────────────── [Upload] ┐
-│ [Search]  [Sort: date ▼]   Showing x–y  │
-├────────────────────────────────────────┤
-│ virtualized rows                        │
-├────────────────────────────────────────┤
-│  [< Prev]  Page n  [Next >]             │
-└────────────────────────────────────────┘
+│ [Search]   sort / pagination hints      │
+├──────────────────────────────────────────┤
+│  virtualized list of resume cards/rows   │
+├──────────────────────────────────────────┤
+│  paging controls                         │
+└──────────────────────────────────────────┘
 ```
 
-## Job postings page
+## Jobs (`/job-descriptions`)
 
 ```text
-┌ Job postings ─────────────── [Paste] ┐
-│ Session [combobox]  Filter [combobox] │
-├───────────────────────────────────────┤
-│ virtualized list                      │
+┌ Jobs ─────────────────────── [Paste] ┐
+│ [Search]   filters / session scope      │
+├──────────────────────────────────────────┤
+│  virtualized job description rows        │
+└──────────────────────────────────────────┘
+```
+
+## Templates (`/templates`)
+
+```text
+┌ Library ───────────────────── [New] ┐
+│ [Search templates…]                 │
+│  virtualized template rows          │
+├─────────────────────────────────────┤
+│  Editor / preview (sheet or split)   │
+│  LaTeX source + Save + Preview PDF   │
+└─────────────────────────────────────┘
+```
+
+## PDF exports (`/outputs`)
+
+```text
+┌ PDF exports ─────────────────────────┐
+│ Session (optional) / Resume / Template│
+│ [comboboxes]          [Generate]      │
+│  status text + download when ready    │
 └───────────────────────────────────────┘
-```
-
-## Templates — library column
-
-```text
-┌ Library ─────────────────── [New] ┐
-│ [Search templates…]                │
-│ virtualized template rows          │
-└────────────────────────────────────┘
-```
-
-## Outputs
-
-```text
-┌ Generate PDF ─────────────────────┐
-│ Session / Resume / Template       │
-│ [comboboxes]                      │
-│ [Generate]  status / download     │
-└───────────────────────────────────┘
 ```

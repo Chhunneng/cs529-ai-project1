@@ -1,11 +1,19 @@
-# AI Resume Agent (Phase 1 scaffold)
+# AI Resume Agent
 
-PDF-first AI Resume Agent platform scaffold:
+PDF-first AI resume platform: **Next.js** + **FastAPI** + **worker** + **Postgres** + **Redis** + **OpenAI** + **pdflatex** for local, end-to-end flows.
 
-- **frontend**: Next.js + shadcn/ui — split-pane **resume PDF preview** and chat; assistant replies arrive via **SSE** after each **`POST .../messages`**
-- **backend**: FastAPI + async SQLAlchemy + Alembic + structlog — includes **`pdflatex`** for resume PDF compilation (internal HTTP endpoint). The **`worker`** runs **`python -m app.worker.runner`** (Redis queue: **`resume_pdf_generation`**, parse resume, render resume output).
-- **postgres**: persistence (Alembic baseline **`0001_baseline_pdf_first_chat`**; reset DB when upgrading from older schemas)
-- **redis**: job queue (`queue:agent-jobs`) and **pub/sub** (`chat:reply:{user_message_id}`) so the worker can notify the API when an assistant message is saved
+- **Chat**: split-pane resume PDF preview and chat; assistant replies via **SSE** after each **`POST .../messages`**; optional **chat PDF** artifacts from the agent + LaTeX.
+- **Resumes**: upload, background **parse** to structured JSON (`parsed_json`), list/download/delete.
+- **Job descriptions**: manage job text used to tailor chat and rendering (API + UI).
+- **Resume templates**: CRUD LaTeX templates and **preview PDF**.
+- **PDF exports (resume outputs)**: enqueue **`render_resume`** on Redis; worker fills template and compiles PDF via the internal LaTeX service.
+
+Stack pieces:
+
+- **frontend**: Next.js + shadcn/ui (Chat, Resumes, Jobs, Templates, PDF exports).
+- **backend**: FastAPI + async SQLAlchemy + Alembic + structlog — **`pdflatex`** and **`POST /api/v1/internal/compile`**. **`worker`**: **`python -m app.worker.runner`** — Redis jobs: **`resume_pdf_generation`**, **`parse_resume`**, **`render_resume`**.
+- **postgres**: persistence (Alembic from **`0001_baseline_pdf_first_chat`** onward; reset DB when upgrading from older schemas).
+- **redis**: job queue (`queue:agent-jobs`) and **pub/sub** (`chat:reply:{user_message_id}`) so the worker can notify the API when an assistant message is saved.
 
 ## Architecture (short)
 
@@ -64,7 +72,7 @@ If you still have an older `.env` with `LATEX_SERVICE_URL=http://latex:8090`, up
 - **Delete message**: `DELETE /api/v1/sessions/{session_id}/messages/{message_id}` (trims OpenAI Agents SDK rows from the same cutoff time)
 - **Download chat PDF**: `GET /api/v1/sessions/{session_id}/pdf-artifacts/{pdf_artifact_id}/file`
 - **Assistant reply stream (SSE)**: `GET /api/v1/sessions/{session_id}/messages/assistant-stream?user_message_id=<uuid>` — one `message` event with JSON (`type`: `assistant` | `timeout` | `error`), then the connection closes.
-- **Resumes / templates / resume-outputs**: see OpenAPI at `/docs` when the backend is running.
+- **Resumes, job descriptions, templates, resume outputs, artifacts**: see OpenAPI at `/docs` when the backend is running.
 
 Legacy paths under `/api/v1/session/*`, `/api/v1/chat/*`, and `/api/v1/resume/*` have been **removed**; use the routes above.
 
@@ -81,6 +89,6 @@ Legacy paths under `/api/v1/session/*`, `/api/v1/chat/*`, and `/api/v1/resume/*`
 
 ## Notes
 
-- No auth/users yet (kept simple for scaffold).
+- **No authentication**: single-user style for local development; all sessions and data are open to anyone who can reach the API.
 - **`data/artifacts`** (host dir) is mounted for generated PDFs when using resume outputs + LaTeX.
 - With **`make dev`**, if you change **`frontend/package.json`**, run **`npm ci`** inside the frontend container or remove the Compose volume **`frontend_dev_node_modules`** so dependencies reinstall.

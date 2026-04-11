@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 
 from agents.extensions.memory import SQLAlchemySession
-from agents.memory import SessionSettings
 
 from app.db.session import engine
 from app.llm.openai_agents_sdk_tables import (

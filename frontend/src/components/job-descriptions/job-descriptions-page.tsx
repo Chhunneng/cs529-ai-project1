@@ -1,18 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { VirtualList } from "@/components/lists/virtual-list";
 
 import {
-  activateJobDescription,
-  createJobDescription,
+  createJobDescriptionLibrary,
   listJobDescriptions,
-  listSessions,
   pingBackend,
   type JobDescriptionResponse,
-  type SessionResponse,
 } from "@/lib/api";
 import { AppPageHeader } from "@/components/layout/app-page-header";
 import { PasteJobDescriptionDialog } from "@/components/job-descriptions/paste-job-description-dialog";
@@ -29,10 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { SearchableResourceCombobox } from "@/components/ui/searchable-resource-combobox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listRowClasses } from "@/lib/list-row-styles";
-import { JD_FILTER_ALL, SELECT_NONE as NONE } from "@/lib/select-display";
 import { cn } from "@/lib/utils";
 
 function previewLine(raw: string, max = 100): string {
@@ -47,12 +42,7 @@ export function JobDescriptionsPage() {
   const [connection, setConnection] = useState<"checking" | "ready" | "offline">("checking");
   const apiReady = connection === "ready";
 
-  const [sessions, setSessions] = useState<SessionResponse[]>([]);
-  const [sessionId, setSessionId] = useState<string>(NONE);
-  const [filterSessionId, setFilterSessionId] = useState<string>(JD_FILTER_ALL);
-
   const [jds, setJds] = useState<JobDescriptionResponse[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(true);
   const [loadingJds, setLoadingJds] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,20 +52,6 @@ export function JobDescriptionsPage() {
   const [pasteError, setPasteError] = useState<string | null>(null);
 
   const [viewJd, setViewJd] = useState<JobDescriptionResponse | null>(null);
-  const [activateBusyId, setActivateBusyId] = useState<string | null>(null);
-
-  const activeJdId = useMemo(() => {
-    if (sessionId === NONE) return null;
-    return sessions.find((s) => s.id === sessionId)?.job_description_id ?? null;
-  }, [sessions, sessionId]);
-
-  const displayedJds = useMemo(() => {
-    if (filterSessionId === JD_FILTER_ALL) return jds;
-    const aid = sessions.find((s) => s.id === filterSessionId)?.job_description_id;
-    if (!aid) return [];
-    const jd = jds.find((j) => j.id === aid);
-    return jd ? [jd] : [];
-  }, [jds, sessions, filterSessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,22 +66,14 @@ export function JobDescriptionsPage() {
   const refreshData = useCallback(async () => {
     if (!apiReady) return;
     setError(null);
-    setLoadingSessions(true);
     setLoadingJds(true);
     try {
-      const [rows, list] = await Promise.all([
-        listSessions({ limit: 200, offset: 0 }),
-        listJobDescriptions({ limit: 200, offset: 0 }),
-      ]);
-      setSessions(rows.items);
+      const list = await listJobDescriptions({ limit: 200, offset: 0 });
       setJds(list.items);
-      setSessionId((prev) => (prev !== NONE ? prev : (rows.items[0]?.id ?? NONE)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load sessions or job postings.");
+      setError(e instanceof Error ? e.message : "Could not load job postings.");
       setJds([]);
-      setSessions([]);
     } finally {
-      setLoadingSessions(false);
       setLoadingJds(false);
     }
   }, [apiReady]);
@@ -115,7 +83,7 @@ export function JobDescriptionsPage() {
   }, [refreshData]);
 
   async function handlePasteSubmit() {
-    if (!apiReady || sessionId === NONE) return;
+    if (!apiReady) return;
     const text = pasteText.trim();
     if (!text) {
       setPasteError("Paste the job posting text first.");
@@ -124,7 +92,7 @@ export function JobDescriptionsPage() {
     setPasteError(null);
     setPasteBusy(true);
     try {
-      await createJobDescription({ session_id: sessionId, raw_text: text, set_active: true });
+      await createJobDescriptionLibrary(text);
       setPasteOpen(false);
       setPasteText("");
       await refreshData();
@@ -135,60 +103,13 @@ export function JobDescriptionsPage() {
     }
   }
 
-  async function handleActivate(jdId: string) {
-    if (!apiReady || sessionId === NONE || jdId === activeJdId) return;
-    setActivateBusyId(jdId);
-    setError(null);
-    try {
-      await activateJobDescription({ session_id: sessionId, job_description_id: jdId });
-      await refreshData();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not set active job posting.");
-    } finally {
-      setActivateBusyId(null);
-    }
-  }
-
-  const noSession = sessionId === NONE;
-  const canPaste = apiReady && !noSession && !pasteBusy;
-  const filterIsAll = filterSessionId === JD_FILTER_ALL;
-
-  const sessionPickerOptions = useMemo(
-    () =>
-      sessions.map((s) => ({
-        value: s.id,
-        label: `${s.id.slice(0, 8)}…`,
-        description: new Date(s.created_at).toLocaleDateString(),
-      })),
-    [sessions],
-  );
-
-  const filterPickerOptions = useMemo(
-    () =>
-      sessions.map((s) => ({
-        value: s.id,
-        label: `Active in ${s.id.slice(0, 8)}…`,
-        description: new Date(s.created_at).toLocaleDateString(),
-      })),
-    [sessions],
-  );
+  const canPaste = apiReady && !pasteBusy;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <AppPageHeader
         title="Job postings"
-        description={
-          <>
-            Postings are shared across the app. Pick a chat to paste a new posting or set which one is{" "}
-            <strong className="font-medium">active</strong> for that conversation (tailoring and PDFs). Use{" "}
-            <strong className="font-medium">Show</strong> to narrow the list to the active posting for a specific
-            chat. You can also manage this from{" "}
-            <Link href="/" className="font-medium text-primary underline underline-offset-4">
-              Chat
-            </Link>
-            .
-          </>
-        }
+        description="Saved job descriptions live in a shared library. Paste text to add a new posting, or open one to read the full text."
       />
 
       <div className="flex flex-col gap-4 p-4 md:p-5">
@@ -212,61 +133,13 @@ export function JobDescriptionsPage() {
         <Card className="border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
           <CardHeader className="flex flex-col gap-3 border-b border-border/60 bg-muted/15 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 flex-col gap-1">
-              <CardTitle className="text-base font-semibold tracking-tight">Working chat</CardTitle>
-              <CardDescription className="text-sm leading-relaxed">
-                Paste posting and &quot;Set active&quot; apply to this chat. The active posting is used for that
-                conversation when you generate a PDF or tailor from Chat.
-              </CardDescription>
-            </div>
-            <div className="flex shrink-0 flex-row flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={!apiReady || loadingSessions || loadingJds}
-                onClick={() => void refreshData()}
-              >
-                Reload sessions &amp; list
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 p-4">
-            {loadingSessions && sessions.length === 0 ? (
-              <Skeleton className="h-9 w-full max-w-md" />
-            ) : (
-              <div className="flex max-w-md flex-col gap-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Chat</div>
-                <SearchableResourceCombobox
-                  value={sessionId}
-                  onValueChange={(v) => {
-                    setSessionId(v);
-                    setError(null);
-                  }}
-                  options={sessionPickerOptions}
-                  noneValue={NONE}
-                  noneLabel="No session selected"
-                  placeholder="Choose a session…"
-                  searchPlaceholder="Filter loaded chats…"
-                  disabled={!apiReady}
-                />
-              </div>
-            )}
-            {noSession ? (
-              <p className="text-sm text-muted-foreground">
-                Select a chat above to enable <strong className="font-medium text-foreground">Paste posting</strong>{" "}
-                and <strong className="font-medium text-foreground">Set active</strong> for that conversation.
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/90 bg-card/80 shadow-sm backdrop-blur-sm">
-          <CardHeader className="flex flex-col gap-3 border-b border-border/60 bg-muted/15 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 flex-col gap-1">
               <CardTitle className="text-base font-semibold tracking-tight">All job postings</CardTitle>
               <CardDescription className="text-sm leading-relaxed">
-                Browse every saved posting. Use <strong className="font-medium">Show</strong> to list only the posting
-                currently active for a given chat.
+                Browse saved postings. To use one in a conversation, open{" "}
+                <Link href="/" className="font-medium text-primary underline underline-offset-4">
+                  Chat
+                </Link>{" "}
+                and pick it in Session tools.
               </CardDescription>
             </div>
             <div className="flex shrink-0 flex-row flex-wrap gap-2">
@@ -293,20 +166,6 @@ export function JobDescriptionsPage() {
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 p-4">
-            <div className="flex max-w-md flex-col gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Show</div>
-              <SearchableResourceCombobox
-                value={filterSessionId}
-                onValueChange={(v) => setFilterSessionId(v)}
-                options={filterPickerOptions}
-                noneValue={JD_FILTER_ALL}
-                noneLabel="All postings"
-                placeholder="Filter list…"
-                searchPlaceholder="Filter by chat…"
-                disabled={!apiReady || loadingSessions}
-              />
-            </div>
-
             {loadingJds ? (
               <div className="flex flex-col gap-2">
                 <Skeleton className="h-14 w-full" />
@@ -316,9 +175,7 @@ export function JobDescriptionsPage() {
               <Empty className="min-h-[160px] border border-dashed border-border/60 bg-muted/10 py-8">
                 <EmptyHeader>
                   <EmptyTitle className="font-semibold tracking-tight">No postings yet</EmptyTitle>
-                  <EmptyDescription>
-                    Paste a job description (with a chat selected) to save it to the shared library.
-                  </EmptyDescription>
+                  <EmptyDescription>Paste a job description to save it to the shared library.</EmptyDescription>
                 </EmptyHeader>
                 <Button
                   type="button"
@@ -333,65 +190,37 @@ export function JobDescriptionsPage() {
                   Paste posting
                 </Button>
               </Empty>
-            ) : !filterIsAll && displayedJds.length === 0 ? (
-              <Empty className="min-h-[140px] border border-dashed border-border/60 bg-muted/10 py-8">
-                <EmptyHeader>
-                  <EmptyTitle className="font-semibold tracking-tight">No active posting for this chat</EmptyTitle>
-                  <EmptyDescription>
-                    That chat does not have an active job posting yet. Choose another filter or set one active from the
-                    list.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
             ) : (
-              <VirtualList items={displayedJds} estimateSize={76} maxHeight="min(65vh,560px)">
-                {(jd) => {
-                  const isActive = activeJdId === jd.id;
-                  return (
-                    <div className="px-0.5 pb-1">
-                      <div
-                        role="row"
-                        data-state={isActive ? "selected" : undefined}
-                        className={cn(
-                          "flex min-h-11 w-full flex-col gap-2 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:gap-3",
-                          listRowClasses(isActive),
-                        )}
+              <VirtualList items={jds} estimateSize={76} maxHeight="min(65vh,560px)">
+                {(jd) => (
+                  <div className="px-0.5 pb-1">
+                    <div
+                      role="row"
+                      className={cn(
+                        "flex min-h-11 w-full flex-col gap-2 rounded-lg px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3",
+                        listRowClasses(false),
+                      )}
+                    >
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-md px-1 text-left -mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
+                        onClick={() => setViewJd(jd)}
                       >
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 rounded-md -mx-1 px-1"
-                          aria-current={isActive ? "true" : undefined}
-                          onClick={() => setViewJd(jd)}
-                        >
-                          <span className="truncate text-sm font-medium leading-snug text-foreground">
-                            {previewLine(jd.raw_text)}
-                          </span>
-                          <span className="font-mono text-[10px] leading-tight text-muted-foreground">
-                            {jd.id.slice(0, 8)}… · {new Date(jd.created_at).toLocaleString()}
-                          </span>
-                        </button>
-                        <div className="flex shrink-0 flex-row flex-wrap items-center gap-2 sm:justify-end">
-                          {!isActive ? (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              disabled={!apiReady || noSession || activateBusyId === jd.id}
-                              onClick={() => void handleActivate(jd.id)}
-                            >
-                              {activateBusyId === jd.id ? "Setting…" : "Set active"}
-                            </Button>
-                          ) : (
-                            <span className="text-[11px] font-medium text-muted-foreground">Active for this chat</span>
-                          )}
-                          <Button type="button" variant="outline" size="sm" onClick={() => setViewJd(jd)}>
-                            View
-                          </Button>
-                        </div>
+                        <span className="truncate text-sm font-medium leading-snug text-foreground">
+                          {previewLine(jd.raw_text)}
+                        </span>
+                        <span className="font-mono text-[10px] leading-tight text-muted-foreground">
+                          {jd.id.slice(0, 8)}… · {new Date(jd.created_at).toLocaleString()}
+                        </span>
+                      </button>
+                      <div className="flex shrink-0 flex-row flex-wrap items-center gap-2 sm:justify-end">
+                        <Button type="button" variant="outline" size="sm" onClick={() => setViewJd(jd)}>
+                          View
+                        </Button>
                       </div>
                     </div>
-                  );
-                }}
+                  </div>
+                )}
               </VirtualList>
             )}
           </CardContent>
@@ -408,20 +237,15 @@ export function JobDescriptionsPage() {
           }
         }}
         title="Paste job posting"
-        description={
-          <>
-            Saves the text to the shared library and sets it as the active posting for your selected chat (for PDFs
-            and tailoring).
-          </>
-        }
+        description="Saves the text to the shared library. You can attach it to a chat later from Session tools."
         value={pasteText}
         onValueChange={setPasteText}
         error={pasteError}
-        confirmLabel="Save and set active"
+        confirmLabel="Save posting"
         confirmBusyLabel="Saving…"
         onConfirm={handlePasteSubmit}
         isSubmitting={pasteBusy}
-        confirmDisabled={!apiReady || noSession}
+        confirmDisabled={!apiReady}
       />
 
       <Dialog open={viewJd != null} onOpenChange={(o) => !o && setViewJd(null)}>

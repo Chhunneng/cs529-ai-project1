@@ -3,8 +3,13 @@ from agents.tool import function_tool
 
 from app.features.latex.exceptions import LaTeXCompileFailed
 from app.features.resumes.repositories import load_resume_row
-from app.features.resumes.service import build_resume_overview_text, resume_excerpt, search_resume_text
-from app.features.job_descriptions.service import fetch_job_description_excerpt
+from app.features.resumes.service import (
+    build_resume_overview_text,
+    resume_excerpt,
+    resume_source_text,
+    search_resume_text,
+)
+from app.features.job_descriptions.service import fetch_full_job_description_text, fetch_job_description_excerpt
 from app.features.latex.service import compile_latex_to_pdf
 from app.llm.context import JobDescriptionAgentContext, ResumeAgentContext, ToolTraceContext
 from app.core.config import settings
@@ -34,6 +39,25 @@ async def get_resume_overview(ctx: RunContextWrapper[ResumeAgentContext]) -> str
         resume=resume,
         max_chars=settings.openai.agent_resume_overview_max_chars,
     )
+
+
+@function_tool(
+    is_enabled=lambda ctx, _agent: ctx.context.resume_id is not None,
+)
+async def get_full_resume_text(ctx: RunContextWrapper[ResumeAgentContext]) -> str:
+    """Load the full text of the user's linked resume.
+
+    When to call: Use this when you need to understand the full resume text before
+    proposing edits, rewrites, or LaTeX. Takes no arguments; the active resume comes from
+    the session context.
+
+    What you get: The full resume text.
+    """
+    resume_id = ctx.context.resume_id
+    resume = await load_resume_row(resume_id=resume_id)
+    if resume is None:
+        return "Selected resume was not found."
+    return resume_source_text(resume=resume)
 
 
 @function_tool(
@@ -107,14 +131,10 @@ async def get_active_job_description(ctx: RunContextWrapper[JobDescriptionAgentC
     suggesting edits, rewrites, or LaTeX. Takes no arguments; the active job description
     comes from the session context.
 
-    What you get: The full job description text. The result is always truncated; it is not the full document.
+    What you get: The full job description text.
     """
     job_description_id = ctx.context.job_description_id
-    text = await fetch_job_description_excerpt(
-        job_description_id=job_description_id,
-        max_chars=settings.openai.agent_jd_tool_max_chars,
-    )
-    return text
+    return await fetch_full_job_description_text(job_description_id=job_description_id)
 
 
 @function_tool(
@@ -127,7 +147,7 @@ async def get_resume_template_latex(ctx: RunContextWrapper[ResumeAgentContext]) 
     and the same kinds of section/list commands the template uses.
 
     What you get: The template source. Treat placeholder sections and example headings in the
-    template as samples only: replace them with real content from get_resume_overview /
+    template as samples only: replace them with real content from get_full_resume_text /
     get_resume_excerpt / search_in_resume. You may add headers, bullet key points, extra
     sections, or reorder content for the user and job; do not ship a PDF that only echoes the
     template shell with empty or generic blocks.

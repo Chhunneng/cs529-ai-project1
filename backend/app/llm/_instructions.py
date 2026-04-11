@@ -263,14 +263,34 @@ Rules:
 """.strip()
 
 
-RESUME_TAILOR_INSTRUCTIONS = """You are an expert resume tailor.
-You will receive a resume, a job description, and optionally a resume template.
+RESUME_TAILOR_INSTRUCTIONS = """
+You are an expert resume tailor. You output one structured object only (no extra prose outside it).
 
-Goal:
-- Generate a revised resume that improves ATS/recruiter fit for the target job.
-- Preserve the original template/section order and formatting style.
-- Do not fabricate facts (experience, titles, dates, skills, education).
-- Only strengthen wording, ordering, and bullet emphasis based on matching results."""
+Workflow (follow in order):
+1. Call get_job_description_details once. If the result is missing, empty, or clearly unusable,
+   note that in change_summary and continue with a best-effort tailored_resume_text from the resume
+   only—do not claim JD alignment you do not have.
+2. Call get_full_resume_text once. Treat it as the source of truth for facts (employers, titles,
+   dates, degrees, skills, metrics).
+3. Internally map JD sections (Keywords, Skills, Requirements) to lines that already exist in the
+   resume. Only emphasize overlaps that are honestly supported by the resume text.
+4. Optionally use get_resume_excerpt for a targeted slice if you must re-check a long section; do
+   not contradict the full text you already loaded.
+
+Rules:
+- Improve ATS and recruiter fit via clearer impact, ordering, and bullet emphasis—not new facts.
+- Do not add or imply employers, titles, dates, education, certifications, tools, or metrics that
+   are not supported by the loaded resume text.
+- If the JD requires something absent from the resume, mention it only in change_summary as a gap
+   or interview prep—not as a fake accomplishment.
+- Preserve a sensible plain-text section order (header, summary if any, experience, education,
+   skills, etc.) unless reordering clearly improves scan-ability without inventing content.
+- tailored_resume_text must be plain text only: no markdown code fences, no JSON inside the string.
+
+Output:
+- Fill every structured field. matched_keywords: short phrases from the JD that you genuinely
+  reflected in wording; leave empty if none; dedupe.
+""".strip()
 
 
 RESUME_AGENT_INSTRUCTIONS = (
@@ -282,6 +302,12 @@ RESUME_AGENT_INSTRUCTIONS = (
     "job description text is needed. Call get_resume_template_latex when a template is linked. "
     "You may call check_latex_compiles_on_server on a draft to verify pdflatex can compile it here "
     "before you return latex_document.\n"
+    "Tailoring vs LaTeX: When the user wants a tailored resume, a PDF, or an updated typeset "
+    "document and a job description is linked, call tailor_resume_for_job before drafting "
+    "latex_document. Treat the tool's tailored_resume_text as the authoritative plain-text body for "
+    "the document; still use the template tool for preamble, packages, fonts, and section macros. "
+    "For pure Q&A, brainstorming, or light edits with no document or full-rewrite request, skip "
+    "tailor_resume_for_job unless the user explicitly asks for rewritten resume content.\n"
     "Template vs content: The linked template is for visual style and LaTeX syntax only—preamble "
     "(\\documentclass, \\usepackage), fonts, colors, and the kinds of macros/commands used for "
     "sections and lists. Do not treat the template as a fixed outline to copy. Replace any "
@@ -297,7 +323,8 @@ RESUME_AGENT_INSTRUCTIONS = (
     "When the user clearly wants a PDF or updated resume document, set latex_document to a complete "
     "LaTeX file pdflatex can compile (\\documentclass through \\end{document}). Reuse the "
     "template's preamble and styling patterns when a template exists; build the document body from "
-    "fetched resume (and JD) content, not from empty template placeholders.\n"
+    "tailored_resume_text (after tailor_resume_for_job when applicable) and tools—not from empty "
+    "template placeholders.\n"
     "If they asked for a document but you cannot produce safe LaTeX, explain in assistant_message "
     "and either return null for latex_document or minimal valid LaTeX that states the issue."
 )

@@ -21,6 +21,8 @@ import {
   type ResumeTemplateListItem,
   type SessionResponse,
 } from "@/lib/api";
+import { readLastChatLinks, sessionPatchBodyFromStored } from "@/lib/chat-link-prefs";
+import { useChatWorkspace } from "@/components/chat/use-chat-workspace";
 import { PasteJobDescriptionDialog } from "@/components/job-descriptions/paste-job-description-dialog";
 import { TemplateManagerSheet } from "@/components/templates/template-manager-sheet";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -76,6 +78,7 @@ export function ContextPanel({
   variant?: "sidebar" | "embedded";
   onSessionSynced?: (session: SessionResponse) => void;
 }) {
+  const { pendingLinkBootstrapSessionId, clearPendingLinkBootstrap } = useChatWorkspace();
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
@@ -122,6 +125,8 @@ export function ContextPanel({
       setTemplatesTotal(t.total);
       setTemplateId((prev) => {
         if (t.items.length === 0) return prev;
+        const stored = readLastChatLinks()?.resume_template_id;
+        if (stored && t.items.some((x) => String(x.id) === stored)) return stored;
         if (t.items.some((x) => String(x.id) === prev)) return prev;
         return String(t.items[0].id);
       });
@@ -329,6 +334,82 @@ export function ContextPanel({
       cancelled = true;
     };
   }, [sessionId, apiReady, onSessionSynced]);
+
+  // `loadLists` picks a default template for the combobox, but the server session keeps
+  // `resume_template_id` null until the user changes the picker — so chat stays blocked.
+  // When the UI template differs from the session, persist it once (same as choosing it).
+  useEffect(() => {
+    if (!sessionId || !apiReady || sessionLoading || !session) return;
+    if (String(session.id) !== String(sessionId)) return;
+    if (!templateId) return;
+    const serverT = session.resume_template_id ? String(session.resume_template_id) : "";
+    if (serverT === templateId) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await patchSession(sessionId, { resume_template_id: templateId });
+        if (cancelled) return;
+        setSession(s);
+        onSessionSynced?.(s);
+      } catch {
+        if (!cancelled) setOutputNotice("Failed to update session template.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, apiReady, sessionLoading, session, templateId, onSessionSynced]);
+
+  useEffect(() => {
+    if (!sessionId || !apiReady || sessionLoading || !session) return;
+    if (pendingLinkBootstrapSessionId !== sessionId) return;
+    if (String(session.id) !== String(sessionId)) return;
+
+    if (session.resume_id || session.job_description_id || session.resume_template_id) {
+      clearPendingLinkBootstrap();
+      return;
+    }
+
+    const body = sessionPatchBodyFromStored();
+    if (!body) {
+      clearPendingLinkBootstrap();
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await patchSession(sessionId, body);
+        if (cancelled) return;
+        setSession(s);
+        setResumeValue(s.resume_id ?? NONE);
+        setJdValue(s.job_description_id ?? JD_NONE);
+        if (s.resume_template_id) {
+          setTemplateId(s.resume_template_id);
+        }
+        onSessionSynced?.(s);
+      } catch {
+        if (!cancelled) {
+          setOutputNotice("Could not apply saved resume, job description, or template.");
+        }
+      } finally {
+        if (!cancelled) clearPendingLinkBootstrap();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    sessionId,
+    apiReady,
+    sessionLoading,
+    session,
+    pendingLinkBootstrapSessionId,
+    clearPendingLinkBootstrap,
+    onSessionSynced,
+  ]);
 
   async function onResumeChange(value: string) {
     if (!sessionId || !apiReady) return;

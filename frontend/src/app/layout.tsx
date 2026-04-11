@@ -21,8 +21,8 @@ export const metadata: Metadata = {
   title: "AI Resume Agent",
   description: "Chat-first resume optimization platform",
   icons: {
-    icon: [{ url: "/icon.png", type: "image/png" }],
-    apple: [{ url: "/apple-icon.png", type: "image/png" }],
+    icon: [{ url: "/icon", type: "image/png" }],
+    apple: [{ url: "/apple-icon", type: "image/png" }],
   },
 };
 

@@ -19,3 +19,9 @@ async def fetch_job_description_excerpt(*, job_description_id: uuid.UUID, max_ch
     if not raw:
         return "(Job description record is empty.)"
     return _clip(raw, max_chars)
+
+async def fetch_full_job_description_text(*, job_description_id: uuid.UUID) -> str | None:
+    job_description = await load_job_description_row(job_description_id=job_description_id)
+    if job_description is None:
+        return "Active job description was not found."
+    return str(job_description.raw_text or "").strip()

@@ -61,6 +61,38 @@ class JobDescriptionParserOutput(BaseModel):
     )
 
 
+class ResumeTailorOutput(BaseModel):
+    """Structured plain-text output from the resume tailor sub-agent for JD-aligned editing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tailored_resume_text: str = Field(
+        ...,
+        description=(
+            "Complete plain-text resume after tailoring—every section you intend to ship in the final "
+            "document, in reading order. No markdown code fences or JSON inside this string. "
+            "The parent resume assistant should treat this as the authoritative body copy when "
+            "building LaTeX for a job-targeted PDF."
+        ),
+    )
+    change_summary: str = Field(
+        ...,
+        description=(
+            "Short plain-text summary of what changed: bullets reordered or rewritten, sections merged, "
+            "and JD gaps called out as gaps only (not invented credentials). Suitable for a brief "
+            "user-facing explanation in chat."
+        ),
+    )
+    matched_keywords: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Short phrases drawn from the parsed job description (Keywords/Skills/Requirements) that "
+            "you naturally reflected in the tailored resume wording. Only include phrases that are "
+            "honestly supported by existing resume content; omit fluff; dedupe."
+        ),
+    )
+
+
 class ResumePdfMessageOutput(BaseModel):
     """Structured final output: user-facing text plus LaTeX source for PDF compilation."""
 

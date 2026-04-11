@@ -8,9 +8,10 @@ from app.llm.schema import (
     ResumeFillAtsV1,
     ResumePdfMessageOutput,
     ResumeProfileV1,
+    ResumeTailorOutput,
 )
 from app.llm.tools import (
-    get_resume_overview,
+    get_full_resume_text,
     get_resume_excerpt,
     search_in_resume,
     get_active_job_description,
@@ -61,14 +62,6 @@ RESUME_EXTRACT_AGENT = Agent(
     output_type=ResumeProfileV1,
 )
 
-RESUME_TAILOR_AGENT = Agent(
-    name="Resume Tailor Agent",
-    instructions=RESUME_TAILOR_INSTRUCTIONS,
-    model=settings.openai.model,
-    model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
-    tools=[get_resume_excerpt]
-)
-
 
 JOB_DESCRIPTION_PARSER_AGENT = Agent(
     name="Job Description Parser Agent",
@@ -86,6 +79,38 @@ get_job_description_details_tool = JOB_DESCRIPTION_PARSER_AGENT.as_tool(
     tool_description="Get the details of the active job description.",
 )
 
+RESUME_TAILOR_AGENT = Agent(
+    name="Resume Tailor Agent",
+    instructions=RESUME_TAILOR_INSTRUCTIONS,
+    model=settings.openai.model,
+    model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
+    output_type=ResumeTailorOutput,
+    tools=[
+        get_job_description_details_tool,
+        get_full_resume_text,
+        get_resume_excerpt,
+    ],
+)
+
+tailor_resume_for_job_tool = RESUME_TAILOR_AGENT.as_tool(
+    tool_name="tailor_resume_for_job",
+    tool_description=(
+        "Run a dedicated resume-tailoring pass for the active job description. "
+        "Call this when the user wants a tailored, ATS-aware resume or a PDF/typeset document aligned "
+        "to the linked job—before you draft latex_document. "
+        "The sub-agent loads parsed JD details (Keywords, Skills, Requirements) and the full resume "
+        "text, then returns structured fields: tailored_resume_text (plain text, authoritative body "
+        "copy for LaTeX), change_summary, and matched_keywords. "
+        "You must base the document body on tailored_resume_text from this tool—not on stale guesses "
+        "or unfetched resume text. "
+        "Do not use for pure Q&A or advice with no document or rewrite request."
+    ),
+    max_turns=12,
+    is_enabled=lambda ctx, _agent: (
+        ctx.context.resume_id is not None and ctx.context.job_description_id is not None
+    ),
+)
+
 RESUME_PDF_AGENT = Agent(
     name="ResumePdfAssistant",
     instructions=RESUME_AGENT_INSTRUCTIONS,
@@ -93,7 +118,8 @@ RESUME_PDF_AGENT = Agent(
     output_type=ResumePdfMessageOutput,
     tools=[
         get_job_description_details_tool,
-        get_resume_overview,
+        tailor_resume_for_job_tool,
+        get_full_resume_text,
         get_resume_excerpt,
         search_in_resume,
         get_resume_template_latex,

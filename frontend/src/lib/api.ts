@@ -569,6 +569,19 @@ export async function createJobDescription(params: {
   return (await res.json()) as JobDescriptionResponse;
 }
 
+/** Save a posting to the shared library only (no chat session). */
+export async function createJobDescriptionLibrary(raw_text: string): Promise<JobDescriptionResponse> {
+  const res = await fetch(`${apiBaseUrl()}/api/v1/job-descriptions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raw_text, set_active: false }),
+  });
+  if (!res.ok) {
+    throw new Error(`createJobDescriptionLibrary failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as JobDescriptionResponse;
+}
+
 export type PaginatedJobDescriptions = { items: JobDescriptionResponse[]; total: number };
 
 export async function listJobDescriptions(params?: {

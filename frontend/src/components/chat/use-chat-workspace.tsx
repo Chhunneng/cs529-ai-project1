@@ -9,6 +9,7 @@ import {
   pingBackend,
   type SessionResponse,
 } from "@/lib/api";
+import { mergeFromSession } from "@/lib/chat-link-prefs";
 
 const ACTIVE_KEY = "resume-agent:active-session";
 
@@ -37,6 +38,9 @@ export type ChatWorkspaceValue = {
   removeSession: (id: string) => Promise<void>;
   /** Merge a session row from getSession/patch so chat sees up-to-date link IDs. */
   upsertSession: (session: SessionResponse) => void;
+  /** Set when a new session is created; ContextPanel applies stored links once, then clears. */
+  pendingLinkBootstrapSessionId: string | null;
+  clearPendingLinkBootstrap: () => void;
   retryConnection: () => void;
   retryLoadSessions: () => void;
   loadMoreSessions: () => Promise<void>;
@@ -59,8 +63,15 @@ function useChatWorkspaceState(): ChatWorkspaceValue {
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsLoadingMore, setSessionsLoadingMore] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [pendingLinkBootstrapSessionId, setPendingLinkBootstrapSessionId] = useState<string | null>(
+    null,
+  );
 
   const SESSION_PAGE = 100;
+
+  const clearPendingLinkBootstrap = useCallback(() => {
+    setPendingLinkBootstrapSessionId(null);
+  }, []);
 
   const refreshSessions = useCallback(async (focusId?: string | null) => {
     setSessionsError(null);
@@ -114,20 +125,25 @@ function useChatWorkspaceState(): ChatWorkspaceValue {
   }, [connection, refreshSessions]);
 
   const selectSession = useCallback((id: string) => {
+    setPendingLinkBootstrapSessionId((p) => (p && id !== p ? null : p));
     setActiveSessionId(id);
     writeActive(id);
   }, []);
 
   const createNewChat = useCallback(async () => {
     if (connection !== "ready") throw new Error("API unavailable");
+    const active = sessions.find((s) => String(s.id) === activeSessionId);
+    if (active) mergeFromSession(active);
     const { id } = await createSession();
+    setPendingLinkBootstrapSessionId(id);
     await refreshSessions(id);
-  }, [connection, refreshSessions]);
+  }, [connection, refreshSessions, sessions, activeSessionId]);
 
   const removeSession = useCallback(
     async (id: string) => {
       if (connection !== "ready") throw new Error("API unavailable");
       const previousActive = activeSessionId;
+      setPendingLinkBootstrapSessionId((p) => (p === id ? null : p));
       await deleteSession(id);
       if (previousActive === id) {
         writeActive(null);
@@ -164,6 +180,7 @@ function useChatWorkspaceState(): ChatWorkspaceValue {
   ]);
 
   const upsertSession = useCallback((session: SessionResponse) => {
+    mergeFromSession(session);
     const id = String(session.id);
     setSessions((prev) => {
       const idx = prev.findIndex((x) => String(x.id) === id);
@@ -182,6 +199,8 @@ function useChatWorkspaceState(): ChatWorkspaceValue {
     createNewChat,
     removeSession,
     upsertSession,
+    pendingLinkBootstrapSessionId,
+    clearPendingLinkBootstrap,
     retryConnection,
     retryLoadSessions: () => void refreshSessions().catch(() => undefined),
     loadMoreSessions,

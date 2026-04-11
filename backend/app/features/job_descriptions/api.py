@@ -74,6 +74,26 @@ async def list_job_descriptions(
     return PaginatedJobDescriptionsResponse(items=items, total=total)
 
 
+@router.post(
+    "/job-descriptions",
+    response_model=JobDescriptionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_job_description_global(
+    body: JobDescriptionCreateBody,
+    db: AsyncSession = Depends(get_db_session),
+) -> JobDescriptionResponse:
+    """Add a posting to the shared library without linking a chat session.
+
+    ``set_active`` in the body is ignored (no session context).
+    """
+    job_description = JobDescription(raw_text=body.raw_text, extracted_json=None)
+    db.add(job_description)
+    await db.commit()
+    await db.refresh(job_description)
+    return job_description
+
+
 @router.get("/job-descriptions/{job_description_id}", response_model=JobDescriptionResponse)
 async def get_job_description(
     job_description: JobDescription = Depends(get_job_description_or_404),

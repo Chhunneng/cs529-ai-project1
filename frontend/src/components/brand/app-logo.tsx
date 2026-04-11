@@ -4,6 +4,9 @@ import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 
+/** Intrinsic size of `/icon` (see `app/icon.tsx`); downscaled in layout for sharp nav. */
+const ICON_SRC_SIZE = 256;
+
 export function AppLogo({
   size = 36,
   className,
@@ -21,12 +24,15 @@ export function AppLogo({
       style={{ width: size, height: size }}
     >
       <Image
-        src="/icon.png"
+        src="/icon"
         alt="AI Resume Agent"
-        width={size}
-        height={size}
+        width={ICON_SRC_SIZE}
+        height={ICON_SRC_SIZE}
         className="size-full object-cover"
+        sizes={`${size}px`}
+        quality={100}
         priority
+        unoptimized
       />
     </div>
   );

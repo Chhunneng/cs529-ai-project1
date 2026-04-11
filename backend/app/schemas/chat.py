@@ -4,6 +4,15 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class PendingRepliesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pending_user_message_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="User message IDs whose assistant reply is still queued or running.",
+    )
+
+
 class ChatMessageResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -18,12 +18,15 @@ import type { ChatMessage } from "@/components/chat/types";
 export function ChatThread({
   messages,
   isSending = false,
+  pendingReplyUserIds = [],
   hasOlderMessages = false,
   loadingOlder = false,
   onLoadOlder,
 }: {
   messages: ChatMessage[];
   isSending?: boolean;
+  /** User message IDs whose assistant reply is still being generated (server pending). */
+  pendingReplyUserIds?: string[];
   hasOlderMessages?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void | Promise<void>;
@@ -93,10 +96,20 @@ export function ChatThread({
                   {m.role === "assistant" && m.pdfDownloadUrl ? (
                     <ChatPdfAttachment downloadUrl={m.pdfDownloadUrl} />
                   ) : null}
+                  {m.role === "user" &&
+                  m.id &&
+                  pendingReplyUserIds.includes(m.id) ? (
+                    <div className="flex justify-start">
+                      <div className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground">
+                        <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+                        <span>Generating reply…</span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))}
-            {isSending ? (
+            {isSending && pendingReplyUserIds.length === 0 ? (
               <div className="flex justify-start">
                 <div className="max-w-[min(100%,56rem)] rounded-2xl border border-dashed border-border/50 bg-card/80 px-3.5 py-2.5 shadow-sm">
                   <p className="text-[0.9375rem] leading-[1.65] text-muted-foreground">Thinking…</p>

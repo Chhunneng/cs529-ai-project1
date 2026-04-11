@@ -40,6 +40,7 @@ export function ChatShell() {
   const {
     messages,
     isSending,
+    pendingReplyUserIds,
     canSend,
     sendMessage,
     contextHint,
@@ -120,6 +121,7 @@ export function ChatShell() {
             isOffline={isOffline}
             messages={messages}
             isSending={isSending}
+            pendingReplyUserIds={pendingReplyUserIds}
             canSend={canSend}
             sendMessage={sendMessage}
             contextHint={contextHint}
@@ -147,6 +149,7 @@ function ChatColumn({
   isOffline,
   messages,
   isSending,
+  pendingReplyUserIds,
   canSend,
   sendMessage,
   contextHint,
@@ -158,6 +161,7 @@ function ChatColumn({
   isOffline: boolean;
   messages: ChatMessage[];
   isSending: boolean;
+  pendingReplyUserIds: string[];
   canSend: boolean;
   sendMessage: (t: string) => Promise<void>;
   contextHint: string | null;
@@ -181,6 +185,7 @@ function ChatColumn({
           <ChatThread
             messages={messages}
             isSending={isSending}
+            pendingReplyUserIds={pendingReplyUserIds}
             hasOlderMessages={hasOlderMessages}
             loadingOlder={loadingOlder}
             onLoadOlder={loadOlderMessages}

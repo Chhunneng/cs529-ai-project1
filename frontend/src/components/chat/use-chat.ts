@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "@/components/chat/types";
 import {
   apiChatRowToChatMessage,
+  getSessionPendingReplies,
   listSessionMessages,
   openAssistantReplyStream,
   postSessionMessage,
@@ -22,6 +23,25 @@ const SESSION_LINKS_HINT =
   "Choose a resume, template, and job description in Session tools before you send a message.";
 
 const MESSAGE_WINDOW = 120;
+const POLL_MS = 2500;
+
+function getIncompleteUserMessageIds(messages: ChatMessage[]): string[] {
+  const ids: string[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role !== "user" || !m.id) continue;
+    const next = messages[i + 1];
+    if (!next || next.role !== "assistant") {
+      ids.push(m.id);
+    }
+  }
+  return ids;
+}
+
+function mergePendingFromServer(messages: ChatMessage[], serverIds: string[]): string[] {
+  const incomplete = new Set(getIncompleteUserMessageIds(messages));
+  return serverIds.filter((id) => incomplete.has(id));
+}
 
 function requiredLinkIds(
   s: SessionResponse | null | undefined,
@@ -40,6 +60,7 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME]);
   const [isSending, setIsSending] = useState(false);
+  const [pendingReplyUserIds, setPendingReplyUserIds] = useState<string[]>([]);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const messagesRef = useRef(messages);
@@ -49,32 +70,72 @@ export function useChat(
     if (!sessionId) {
       setMessages([WELCOME]);
       setHasOlderMessages(false);
+      setPendingReplyUserIds([]);
       return;
     }
     if (isOffline) return;
 
     let cancelled = false;
-    listSessionMessages(sessionId, { limit: MESSAGE_WINDOW, anchor: "end" })
-      .then((rows) => {
+    (async () => {
+      try {
+        const [rows, pending] = await Promise.all([
+          listSessionMessages(sessionId, { limit: MESSAGE_WINDOW, anchor: "end" }),
+          getSessionPendingReplies(sessionId).catch(() => ({
+            pending_user_message_ids: [] as string[],
+          })),
+        ]);
         if (cancelled) return;
         if (rows.length === 0) {
           setMessages([WELCOME]);
           setHasOlderMessages(false);
+          setPendingReplyUserIds([]);
           return;
         }
         setMessages(rows);
         setHasOlderMessages(rows.length >= MESSAGE_WINDOW);
-      })
-      .catch(() => {
+        setPendingReplyUserIds(
+          mergePendingFromServer(rows, pending.pending_user_message_ids ?? []),
+        );
+      } catch {
         if (cancelled) return;
         setMessages([WELCOME]);
         setHasOlderMessages(false);
-      });
+        setPendingReplyUserIds([]);
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
   }, [sessionId, isOffline]);
+
+  const pendingKey = pendingReplyUserIds.slice().sort().join(",");
+
+  useEffect(() => {
+    if (!sessionId || isOffline || pendingReplyUserIds.length === 0) return;
+
+    const t = window.setInterval(() => {
+      void (async () => {
+        try {
+          const [rows, pending] = await Promise.all([
+            listSessionMessages(sessionId, { limit: MESSAGE_WINDOW, anchor: "end" }),
+            getSessionPendingReplies(sessionId).catch(() => ({
+              pending_user_message_ids: [] as string[],
+            })),
+          ]);
+          setMessages(rows);
+          setHasOlderMessages(rows.length >= MESSAGE_WINDOW);
+          setPendingReplyUserIds(
+            mergePendingFromServer(rows, pending.pending_user_message_ids ?? []),
+          );
+        } catch {
+          /* ignore transient poll errors */
+        }
+      })();
+    }, POLL_MS);
+
+    return () => window.clearInterval(t);
+  }, [sessionId, isOffline, pendingKey]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!sessionId || isOffline || loadingOlder || !hasOlderMessages) return;
@@ -128,8 +189,9 @@ export function useChat(
       setMessages((prev) => [...prev, { role: "user", content: text }]);
 
       const streamRef: { current: EventSource | null } = { current: null };
+      let userRow: ApiChatRow | null = null;
       try {
-        const userRow = await postSessionMessage({
+        userRow = await postSessionMessage({
           sessionId,
           content: text,
           resume_template_id: ids.resume_template_id,
@@ -141,30 +203,26 @@ export function useChat(
           const copy = [...prev];
           const i = copy.length - 1;
           if (i >= 0 && copy[i].role === "user") {
-            copy[i] = apiChatRowToChatMessage(userRow);
+            copy[i] = apiChatRowToChatMessage(userRow!);
           }
           return copy;
         });
 
-        await new Promise<void>((resolve, reject) => {
-          streamRef.current = openAssistantReplyStream(sessionId, userRow.id, {
+        setPendingReplyUserIds((prev) =>
+          prev.includes(userRow!.id) ? prev : [...prev, userRow!.id],
+        );
+
+        await new Promise<void>((resolve) => {
+          streamRef.current = openAssistantReplyStream(sessionId, userRow!.id, {
             onEvent: (ev) => {
               if (ev.type === "assistant") {
                 const row = ev.message as ApiChatRow;
                 setMessages((prev) => [...prev, apiChatRowToChatMessage(row)]);
+                setPendingReplyUserIds((prev) => prev.filter((x) => x !== userRow!.id));
                 resolve();
                 return;
               }
               if (ev.type === "timeout") {
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    role: "assistant",
-                    content:
-                      ev.detail ??
-                      "No assistant reply yet — check that the worker is running, Redis is up, and OPENAI_API_KEY is set on the worker.",
-                  },
-                ]);
                 resolve();
                 return;
               }
@@ -178,22 +236,36 @@ export function useChat(
                       : "Could not load the assistant reply. Check the API and try again.",
                 },
               ]);
+              setPendingReplyUserIds((prev) => prev.filter((x) => x !== userRow!.id));
               resolve();
             },
             onTransportError: () => {
-              reject(new Error("assistant_stream_failed"));
+              resolve();
             },
           });
         });
       } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content:
-              "Could not send your message or open the reply stream. Check the API URL, CORS, and backend logs.",
-          },
-        ]);
+        setMessages((prev) => {
+          const copy = [...prev];
+          if (
+            copy.length > 0 &&
+            copy[copy.length - 1].role === "user" &&
+            !copy[copy.length - 1].id
+          ) {
+            copy.pop();
+          }
+          return [
+            ...copy,
+            {
+              role: "assistant",
+              content:
+                "Could not send your message or open the reply stream. Check the API URL, CORS, and backend logs.",
+            },
+          ];
+        });
+        if (userRow) {
+          setPendingReplyUserIds((prev) => prev.filter((x) => x !== userRow!.id));
+        }
       } finally {
         streamRef.current?.close();
         streamRef.current = null;
@@ -206,6 +278,7 @@ export function useChat(
   return {
     messages,
     isSending,
+    pendingReplyUserIds,
     canSend,
     sendMessage,
     contextHint,

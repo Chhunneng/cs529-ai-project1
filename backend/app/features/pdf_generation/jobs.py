@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import func, select
 
 from app.db.session import AsyncSessionMaker
+from app.features.sessions.repositories import first_assistant_after_user_created_at
 from app.features.latex.service import compile_latex_to_pdf
 from app.features.pdf_generation.pdf_artifacts import (
     insert_pdf_artifact_row,
@@ -19,9 +20,17 @@ from app.llm.sessions import build_sqlalchemy_conversation_session
 from app.llm.context import ResumeAgentContext
 from app.llm.resume_chat_agent import run_resume_pdf_agent
 from app.queue_jobs import ResumePdfGenerationJob
-from app.features.sessions.chat_reply_redis import publish_chat_reply
+from app.features.sessions.chat_reply_redis import (
+    clear_chat_turn_pending,
+    publish_chat_reply,
+)
 
 log = structlog.get_logger()
+
+_ERROR_ASSISTANT_PREFIX = (
+    "Sorry — something went wrong while generating a reply. "
+    "You can try sending your message again.\n\n"
+)
 
 
 async def _prior_assistant_snippet(*, session_id: uuid.UUID, before_sequence: int) -> str | None:
@@ -106,14 +115,13 @@ async def create_job_description_and_activate(*, session_id: uuid.UUID, raw_text
     return jd_id
 
 
-async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
-    session_id = uuid.UUID(job.session_id)
-
-    log.info("job_received", type=job.type, session_id=str(session_id))
-
-    message_id = uuid.UUID(job.user_message_id)
-    user_message = await fetch_user_message_row(message_id=message_id)
-
+async def _run_resume_pdf_generation_core(
+    job: ResumePdfGenerationJob,
+    *,
+    session_id: uuid.UUID,
+    message_id: uuid.UUID,
+    user_message: ChatMessage,
+) -> None:
     user_text = user_message.content
 
     async with AsyncSessionMaker() as db:
@@ -121,12 +129,14 @@ async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
         if session is None:
             raise RuntimeError("Session not found")
         resume_id = uuid.UUID(job.resume_id) if job.resume_id is not None else None
-        job_description_id = uuid.UUID(job.job_description_id) if job.job_description_id is not None else None
-        resume_template_id = uuid.UUID(job.resume_template_id) if job.resume_template_id is not None else None
-
+        job_description_id = (
+            uuid.UUID(job.job_description_id) if job.job_description_id is not None else None
+        )
+        resume_template_id = (
+            uuid.UUID(job.resume_template_id) if job.resume_template_id is not None else None
+        )
 
     seq = await next_message_sequence(session_id=session_id)
-
 
     memory_session = build_sqlalchemy_conversation_session(chat_session_id=session_id)
     tool_context = ResumeAgentContext(
@@ -140,8 +150,6 @@ async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
         tool_context=tool_context,
         memory_session=memory_session,
     )
-
-    # log.info("pdf_agent_result", pdf_agent_result=pdf_agent_result)
 
     pdf_artifact_id: uuid.UUID | None = None
     assistant_text = pdf_agent_result.assistant_message
@@ -188,3 +196,70 @@ async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
         assistant_message_id=assistant_id,
         pdf_artifact_id=pdf_artifact_id,
     )
+
+
+async def handle_resume_pdf_generation_job(job: ResumePdfGenerationJob) -> None:
+    session_id = uuid.UUID(job.session_id)
+    message_id = uuid.UUID(job.user_message_id)
+
+    log.info("job_received", type=job.type, session_id=str(session_id))
+
+    user_message = await fetch_user_message_row(message_id=message_id)
+    if user_message is None:
+        log.warning("user_message_missing", user_message_id=str(message_id))
+        await clear_chat_turn_pending(session_id=session_id, user_message_id=message_id)
+        return
+
+    user_message_created_at = user_message.created_at
+    if await first_assistant_after_user_created_at(
+        session_id=session_id, user_message_created_at=user_message_created_at
+    ) is not None:
+        log.info("assistant_already_exists_idempotent", user_message_id=str(message_id))
+        await clear_chat_turn_pending(session_id=session_id, user_message_id=message_id)
+        return
+
+    try:
+        await _run_resume_pdf_generation_core(
+            job, session_id=session_id, message_id=message_id, user_message=user_message
+        )
+    except Exception as e:
+        log.exception(
+            "resume_pdf_generation_failed",
+            session_id=str(session_id),
+            user_message_id=str(message_id),
+        )
+        if (
+            await first_assistant_after_user_created_at(
+                session_id=session_id, user_message_created_at=user_message_created_at
+            )
+            is None
+        ):
+            try:
+                seq = await next_message_sequence(session_id=session_id)
+                detail = f"{type(e).__name__}: {e}"
+                if len(detail) > 1200:
+                    detail = detail[:1200] + "…"
+                err_text = _ERROR_ASSISTANT_PREFIX + detail
+                if len(err_text) > 8000:
+                    err_text = err_text[:8000] + "…"
+                assistant_id = await insert_assistant_message(
+                    session_id=session_id,
+                    content=err_text,
+                    sequence=seq,
+                    tool_used="worker.error",
+                    pdf_artifact_id=None,
+                )
+                await publish_chat_reply(
+                    user_message_id=message_id,
+                    session_id=session_id,
+                    assistant_message_id=assistant_id,
+                    pdf_artifact_id=None,
+                )
+            except Exception:
+                log.exception(
+                    "persist_error_assistant_failed",
+                    session_id=str(session_id),
+                    user_message_id=str(message_id),
+                )
+    finally:
+        await clear_chat_turn_pending(session_id=session_id, user_message_id=message_id)

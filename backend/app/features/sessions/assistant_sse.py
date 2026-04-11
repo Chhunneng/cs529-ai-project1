@@ -12,6 +12,10 @@ from app.db.session import AsyncSessionMaker
 from app.models.chat_message import ChatMessage
 from app.features.job_queue.redis import get_redis_client
 from app.features.sessions.chat_messages import chat_message_to_response
+from app.features.sessions.repositories import (
+    first_assistant_after_user_created_at,
+    get_user_message_in_session,
+)
 from app.features.sessions.chat_reply_redis import chat_reply_channel
 
 log = structlog.get_logger()
@@ -41,29 +45,19 @@ async def _load_assistant_for_publish(
 async def stream_assistant_sse(
     session_id: uuid.UUID, user_message_id: uuid.UUID
 ) -> AsyncIterator[str]:
-    async with AsyncSessionMaker() as db:
-        user_msg = await db.scalar(
-            select(ChatMessage).where(
-                ChatMessage.id == user_message_id,
-                ChatMessage.session_id == session_id,
-                ChatMessage.role == "user",
-            )
-        )
-        if user_msg is None:
-            yield _sse_data_line({"type": "error", "detail": "user_message_not_found"})
-            return
+    user_msg = await get_user_message_in_session(
+        session_id=session_id, user_message_id=user_message_id
+    )
+    if user_msg is None:
+        yield _sse_data_line({"type": "error", "detail": "user_message_not_found"})
+        return
 
-        user_created = user_msg.created_at
-        assistant = await db.scalar(
-            select(ChatMessage)
-            .where(
-                ChatMessage.session_id == session_id,
-                ChatMessage.role == "assistant",
-                ChatMessage.created_at > user_created,
-            )
-            .order_by(ChatMessage.created_at.asc())
-            .limit(1)
-        )
+    user_created = user_msg.created_at
+
+    assistant = await first_assistant_after_user_created_at(
+        session_id=session_id,
+        user_message_created_at=user_created,
+    )
 
     if assistant is not None:
         resp = chat_message_to_response(assistant)

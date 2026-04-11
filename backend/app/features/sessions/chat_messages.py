@@ -15,6 +15,7 @@ from app.queue_jobs import ResumePdfGenerationJob
 from app.schemas.chat import ChatMessageResponse
 from app.features.job_queue.redis import enqueue_job
 from app.features.sessions.agents_sdk_trim import delete_agents_sdk_messages_from_cutoff
+from app.features.sessions.chat_reply_redis import mark_chat_turn_pending
 
 log = structlog.get_logger()
 
@@ -105,6 +106,7 @@ async def create_session_turn_and_enqueue(
             job_description_id=str(job_description_id) if job_description_id else None,
         )
     )
+    await mark_chat_turn_pending(session_id=msg.session_id, user_message_id=msg.id)
     log.info(
         "enqueued_job",
         type="resume_pdf_generation",

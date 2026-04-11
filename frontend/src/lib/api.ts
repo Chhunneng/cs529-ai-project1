@@ -117,6 +117,20 @@ export type AssistantStreamEvent =
   | { type: "timeout"; detail?: string }
   | { type: "error"; detail?: string };
 
+export type PendingRepliesResponse = {
+  pending_user_message_ids: string[];
+};
+
+export async function getSessionPendingReplies(sessionId: string): Promise<PendingRepliesResponse> {
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/messages/pending-replies`,
+  );
+  if (!res.ok) {
+    throw new Error(`getSessionPendingReplies failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as PendingRepliesResponse;
+}
+
 export function apiChatRowToChatMessage(row: ApiChatRow): ChatMessage {
   const role: ChatRole =
     row.role === "user" || row.role === "assistant" ? row.role : "assistant";

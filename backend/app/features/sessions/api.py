@@ -16,11 +16,12 @@ from app.core.config import settings
 from app.db.session import get_db_session
 from app.models.chat_session import ChatSession
 from app.models.pdf_artifact import PdfArtifact
-from app.schemas.chat import ChatMessageResponse
+from app.schemas.chat import ChatMessageResponse, PendingRepliesResponse
 from app.schemas.rest import SessionPatchRequest, SessionMessageCreateBody
 from app.schemas.pagination import PaginatedSessionsResponse
 from app.schemas.session import SessionCreateResponse, SessionResponse
 from app.features.sessions.assistant_sse import stream_assistant_sse
+from app.features.sessions.chat_reply_redis import list_pending_user_message_ids
 from app.features.sessions.chat_messages import (
     create_session_turn_and_enqueue,
     delete_chat_message_for_session,
@@ -99,6 +100,20 @@ async def assistant_reply_stream(
         media_type="text/event-stream",
         headers=headers,
     )
+
+
+@router.get("/{session_id}/messages/pending-replies", response_model=PendingRepliesResponse)
+async def list_pending_replies(
+    session: ChatSession = Depends(get_session_or_404),
+) -> PendingRepliesResponse:
+    raw = await list_pending_user_message_ids(session_id=session.id)
+    ids: list[uuid.UUID] = []
+    for s in raw:
+        try:
+            ids.append(uuid.UUID(s))
+        except ValueError:
+            continue
+    return PendingRepliesResponse(pending_user_message_ids=ids)
 
 
 @router.get("/{session_id}/messages", response_model=List[ChatMessageResponse])

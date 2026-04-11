@@ -20,5 +20,5 @@ def build_sqlalchemy_conversation_session(*, chat_session_id: uuid.UUID) -> SQLA
         create_tables=False,
         sessions_table=OPENAI_AGENTS_SDK_SESSIONS_TABLE,
         messages_table=OPENAI_AGENTS_SDK_MESSAGES_TABLE,
-        # session_settings=SessionSettings(limit=5),
+        # session_settings=SessionSettings(limit=10),
     )

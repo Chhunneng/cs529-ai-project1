@@ -1,11 +1,9 @@
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import List
 
 import structlog
 
-from app.core.config import settings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +12,7 @@ from app.models.pdf_artifact import PdfArtifact
 from app.queue_jobs import ResumePdfGenerationJob
 from app.schemas.chat import ChatMessageResponse
 from app.features.job_queue.redis import enqueue_job
+from app.features.pdf_generation.pdf_artifacts import unlink_pdf_artifact_file
 from app.features.sessions.agents_sdk_trim import delete_agents_sdk_messages_from_cutoff
 from app.features.sessions.chat_reply_redis import mark_chat_turn_pending
 
@@ -117,20 +116,6 @@ async def create_session_turn_and_enqueue(
     return chat_message_to_response(msg)
 
 
-def _unlink_pdf_file_if_safe(*, storage_relpath: str) -> None:
-    root = Path(settings.storage.artifacts_dir).resolve()
-    try:
-        path = (root / storage_relpath).resolve()
-        path.relative_to(root)
-    except (ValueError, OSError):
-        return
-    if path.is_file():
-        try:
-            path.unlink()
-        except OSError:
-            pass
-
-
 async def delete_chat_message_for_session(
     db: AsyncSession,
     *,
@@ -152,7 +137,7 @@ async def delete_chat_message_for_session(
     if pdf_id is not None:
         art = await db.get(PdfArtifact, pdf_id)
         if art is not None and art.session_id == session_id:
-            _unlink_pdf_file_if_safe(storage_relpath=art.storage_relpath)
+            unlink_pdf_artifact_file(storage_relpath=art.storage_relpath)
             await db.delete(art)
 
     await db.delete(row)

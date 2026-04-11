@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 from pathlib import Path
-from typing import List
+from typing import List, Literal
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -24,9 +23,9 @@ from app.features.sessions.assistant_sse import stream_assistant_sse
 from app.features.sessions.chat_reply_redis import list_pending_user_message_ids
 from app.features.sessions.chat_messages import (
     create_session_turn_and_enqueue,
-    delete_chat_message_for_session,
     list_messages_for_session,
 )
+from app.features.pdf_generation.pdf_artifacts import unlink_pdf_artifact_file
 from app.features.sessions.service import (
     create_chat_session,
     delete_session_by_id,
@@ -174,6 +173,10 @@ async def download_session_pdf_artifact(
     pdf_artifact_id: uuid.UUID,
     session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
+    disposition: Literal["inline", "attachment"] = Query(
+        default="attachment",
+        description='Use "inline" for browser preview (e.g. iframe); "attachment" encourages download.',
+    ),
 ) -> FileResponse:
     row = await db.scalar(
         select(PdfArtifact).where(
@@ -197,4 +200,28 @@ async def download_session_pdf_artifact(
         path,
         media_type=row.mime_type,
         filename=f"resume-{pdf_artifact_id}.pdf",
+        content_disposition_type=disposition,
     )
+
+
+@router.delete(
+    "/{session_id}/pdf-artifacts/{pdf_artifact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_session_pdf_artifact(
+    pdf_artifact_id: uuid.UUID,
+    session: ChatSession = Depends(get_session_or_404),
+    db: AsyncSession = Depends(get_db_session),
+) -> Response:
+    row = await db.scalar(
+        select(PdfArtifact).where(
+            PdfArtifact.id == pdf_artifact_id,
+            PdfArtifact.session_id == session.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="PDF artifact not found")
+    unlink_pdf_artifact_file(storage_relpath=row.storage_relpath)
+    await db.delete(row)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

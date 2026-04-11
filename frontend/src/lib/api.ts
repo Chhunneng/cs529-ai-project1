@@ -3,8 +3,32 @@ import type { ChatMessage, ChatRole } from "@/components/chat/types";
 const apiBaseUrl = () =>
   (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
-export function resumeOutputPdfUrl(outputId: string): string {
-  return `${apiBaseUrl()}/api/v1/resume-outputs/${encodeURIComponent(outputId)}/pdf`;
+export function resumeOutputPdfUrl(
+  outputId: string,
+  opts?: { disposition?: "inline" | "attachment" },
+): string {
+  const base = `${apiBaseUrl()}/api/v1/resume-outputs/${encodeURIComponent(outputId)}/pdf`;
+  const disposition = opts?.disposition ?? "attachment";
+  if (disposition === "attachment") {
+    return base;
+  }
+  const q = new URLSearchParams({ disposition });
+  return `${base}?${q}`;
+}
+
+/** Chat assistant PDF attachment download / preview URL. */
+export function sessionPdfArtifactFileUrl(
+  sessionId: string,
+  artifactId: string,
+  opts?: { disposition?: "inline" | "attachment" },
+): string {
+  const base = `${apiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/pdf-artifacts/${encodeURIComponent(artifactId)}/file`;
+  const disposition = opts?.disposition ?? "attachment";
+  if (disposition === "attachment") {
+    return base;
+  }
+  const q = new URLSearchParams({ disposition });
+  return `${base}?${q}`;
 }
 
 export function resumeTemplatePreviewPdfUrl(templateId: string): string {
@@ -88,6 +112,77 @@ export type ResumeOutputResponse = {
   created_at: string;
   updated_at: string;
 };
+
+export type PaginatedResumeOutputs = {
+  items: ResumeOutputResponse[];
+  total: number;
+};
+
+export async function listResumeOutputs(params?: {
+  limit?: number;
+  offset?: number;
+  status?: string | null;
+}): Promise<PaginatedResumeOutputs> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  if (params?.status?.trim()) q.set("status", params.status.trim());
+  const qs = q.toString();
+  const res = await fetch(`${apiBaseUrl()}/api/v1/resume-outputs${qs ? `?${qs}` : ""}`);
+  if (!res.ok) {
+    throw new Error(`listResumeOutputs failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as PaginatedResumeOutputs;
+}
+
+export type PdfArtifactListItem = {
+  id: string;
+  session_id: string;
+  mime_type: string;
+  created_at: string;
+};
+
+export type PaginatedPdfArtifacts = {
+  items: PdfArtifactListItem[];
+  total: number;
+};
+
+export async function listPdfArtifacts(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<PaginatedPdfArtifacts> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  const res = await fetch(`${apiBaseUrl()}/api/v1/pdf-artifacts${qs ? `?${qs}` : ""}`);
+  if (!res.ok) {
+    throw new Error(`listPdfArtifacts failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as PaginatedPdfArtifacts;
+}
+
+export async function deleteResumeOutput(outputId: string): Promise<void> {
+  const res = await fetch(`${apiBaseUrl()}/api/v1/resume-outputs/${encodeURIComponent(outputId)}`, {
+    method: "DELETE",
+  });
+  if (res.status === 409) {
+    throw new Error(`deleteResumeOutput conflict (409): ${await readErrorBody(res)}`);
+  }
+  if (!res.ok) {
+    throw new Error(`deleteResumeOutput failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+}
+
+export async function deleteSessionPdfArtifact(sessionId: string, artifactId: string): Promise<void> {
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/sessions/${encodeURIComponent(sessionId)}/pdf-artifacts/${encodeURIComponent(artifactId)}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    throw new Error(`deleteSessionPdfArtifact failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+}
 
 // —— Job descriptions ——
 

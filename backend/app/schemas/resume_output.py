@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ResumeOutputCreateBody(BaseModel):
@@ -11,6 +11,8 @@ class ResumeOutputCreateBody(BaseModel):
 
 
 class ResumeOutputResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     session_id: uuid.UUID
     template_id: uuid.UUID | None

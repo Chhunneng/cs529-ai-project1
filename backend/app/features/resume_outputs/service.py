@@ -1,14 +1,18 @@
+import shutil
 import uuid
+from pathlib import Path
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.chat_session import ChatSession
 from app.queue_jobs import RenderResumeJob
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
 from app.features.job_queue.redis import enqueue_job
+from app.features.sessions.service import _unlink_if_under_artifacts
 
 log = structlog.get_logger()
 
@@ -51,3 +55,21 @@ async def create_resume_output_and_enqueue(
     )
     log.info("enqueued_job", type="render_resume", output_id=str(out.id))
     return out
+
+
+async def delete_resume_output_row(db: AsyncSession, row: ResumeOutput) -> None:
+    """Remove PDF/TeX files and optional worker output directory, then delete the DB row."""
+    root = Path(settings.storage.artifacts_dir).resolve()
+    _unlink_if_under_artifacts(row.pdf_path, root)
+    _unlink_if_under_artifacts(row.tex_path, root)
+    try:
+        out_dir = (root / str(row.id)).resolve()
+        out_dir.relative_to(root)
+        if out_dir.is_dir():
+            shutil.rmtree(out_dir, ignore_errors=True)
+    except (ValueError, OSError):
+        pass
+    output_id = row.id
+    await db.delete(row)
+    await db.commit()
+    log.info("resume_output_deleted", output_id=str(output_id))

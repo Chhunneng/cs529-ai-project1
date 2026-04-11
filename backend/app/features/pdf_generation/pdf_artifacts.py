@@ -12,6 +12,21 @@ from app.models.pdf_artifact import PdfArtifact
 PDF_ARTIFACT_MIME = "application/pdf"
 
 
+def unlink_pdf_artifact_file(*, storage_relpath: str) -> None:
+    """Remove a stored PDF file under ``artifacts_dir`` if it exists (same rules as session/message cleanup)."""
+    root = Path(settings.storage.artifacts_dir).resolve()
+    try:
+        path = (root / storage_relpath).resolve()
+        path.relative_to(root)
+    except (ValueError, OSError):
+        return
+    if path.is_file():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
 @dataclass(frozen=True)
 class PdfArtifactFileWrite:
     artifact_id: uuid.UUID

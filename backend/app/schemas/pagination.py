@@ -5,7 +5,9 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.job_description import JobDescriptionResponse
+from app.schemas.pdf_artifact import PdfArtifactListItem
 from app.schemas.resume import ResumeListItem
+from app.schemas.resume_output import ResumeOutputResponse
 from app.schemas.resume_template import ResumeTemplateListItem
 from app.schemas.session import SessionResponse
 
@@ -35,4 +37,18 @@ class PaginatedJobDescriptionsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[JobDescriptionResponse]
+    total: int
+
+
+class PaginatedResumeOutputsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ResumeOutputResponse]
+    total: int
+
+
+class PaginatedPdfArtifactsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PdfArtifactListItem]
     total: int

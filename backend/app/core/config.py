@@ -37,6 +37,7 @@ class OpenAISettings(BaseModel):
     model: str
     resume_extract_max_input_chars: int
     agent_chat_max_turns: int
+    agent_render_max_turns: int
     agent_resume_overview_max_chars: int
     agent_resume_excerpt_max_chars: int
     agent_jd_tool_max_chars: int
@@ -92,6 +93,7 @@ class Settings(BaseSettings):
     resume_extract_max_input_chars: int = 24000
 
     agent_chat_max_turns: int = 12
+    agent_render_max_turns: int = 20
     agent_resume_overview_max_chars: int = 2500
     agent_resume_excerpt_max_chars: int = 4000
     agent_jd_tool_max_chars: int = 8000
@@ -120,6 +122,7 @@ class Settings(BaseSettings):
             model=self.openai_model,
             resume_extract_max_input_chars=self.resume_extract_max_input_chars,
             agent_chat_max_turns=self.agent_chat_max_turns,
+            agent_render_max_turns=self.agent_render_max_turns,
             agent_resume_overview_max_chars=self.agent_resume_overview_max_chars,
             agent_resume_excerpt_max_chars=self.agent_resume_excerpt_max_chars,
             agent_jd_tool_max_chars=self.agent_jd_tool_max_chars,

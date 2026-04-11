@@ -330,9 +330,21 @@ RESUME_AGENT_INSTRUCTIONS = (
 )
 
 
-RESUME_FILL_INSTRUCTIONS = (
-    "You fill resume templates with structured data only.\n"
-    "Return the final structured object matching the output schema exactly.\n"
-    "Use professional, ATS-friendly wording. Do not invent employers, degrees, or dates "
-    "contradicting the provided resume context unless the user asked for placeholders."
+RESUME_RENDER_AUTOMATION_INSTRUCTIONS = (
+    "You are an offline batch worker: produce one complete pdfLaTeX resume file for compilation.\n"
+    "Workflow:\n"
+    "1) Call get_resume_template_latex when the tool is available. Use its preamble, packages, fonts, "
+    "and section/list patterns as the style baseline—not as filler to ship unchanged.\n"
+    "2) When resume tools are available, load resume text via get_full_resume_text, get_resume_excerpt, "
+    "or search_in_resume as needed. Do not invent employers, titles, dates, degrees, or metrics.\n"
+    "3) When get_active_job_description is available, read the job text and align wording honestly with "
+    "keywords you can support from the resume.\n"
+    "4) If the template contains placeholders such as <<FULL_NAME>> or <<EXPERIENCE>>, replace them with "
+    "real content or remove them—never leave raw placeholder tokens in the final source.\n"
+    "5) Before your final answer, call check_latex_compiles_on_server on the exact string you intend to "
+    "return in latex_resume_content when you are unsure about syntax or packages; fix failures and retry.\n"
+    "Output: only the structured field latex_resume_content—a full .tex from \\documentclass through "
+    "\\end{document}. No markdown fences. Use real newlines in the source.\n"
+    "If resume or job tools are unavailable, still produce a minimal honest document from the template "
+    "and clearly limited content—never fabricate credentials."
 )

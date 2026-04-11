@@ -11,8 +11,8 @@ from app.models.common import UUIDPrimaryKeyMixin, TimestampMixin
 class ResumeOutput(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "resume_outputs"
 
-    session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=True
     )
     template_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("resume_templates.id", ondelete="SET NULL"), nullable=True

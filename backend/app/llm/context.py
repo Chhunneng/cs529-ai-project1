@@ -15,13 +15,14 @@ class ToolTraceContext:
 class JobDescriptionAgentContext:
     """Domain context passed to the Agents SDK ``Runner`` and tools (readable field names)."""
 
-    job_description_id: uuid.UUID
+    job_description_id: uuid.UUID | None = None
 
 
 @dataclass(kw_only=True)
 class ResumeAgentContext(ToolTraceContext, JobDescriptionAgentContext):
     """Domain context passed to the Agents SDK ``Runner`` and tools (readable field names)."""
 
-    chat_session_id: uuid.UUID
-    resume_id: uuid.UUID
+    chat_session_id: uuid.UUID | None = None
+    render_output_id: uuid.UUID | None = None
+    resume_id: uuid.UUID | None = None
     resume_template_id: uuid.UUID

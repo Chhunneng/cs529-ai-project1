@@ -31,8 +31,17 @@ export function sessionPdfArtifactFileUrl(
   return `${base}?${q}`;
 }
 
-export function resumeTemplatePreviewPdfUrl(templateId: string): string {
-  return `${apiBaseUrl()}/api/v1/resume-templates/${encodeURIComponent(templateId)}/preview-pdf`;
+export function resumeTemplatePreviewPdfUrl(
+  templateId: string,
+  opts?: { disposition?: "inline" | "attachment" },
+): string {
+  const base = `${apiBaseUrl()}/api/v1/resume-templates/${encodeURIComponent(templateId)}/preview-pdf`;
+  const disposition = opts?.disposition ?? "attachment";
+  if (disposition === "attachment") {
+    return base;
+  }
+  const q = new URLSearchParams({ disposition });
+  return `${base}?${q}`;
 }
 
 export function resumeDownloadUrl(resumeId: string): string {
@@ -102,7 +111,7 @@ export type ResumeTemplateValidateResult = {
 
 export type ResumeOutputResponse = {
   id: string;
-  session_id: string;
+  session_id: string | null;
   template_id: string | null;
   status: string;
   input_json: Record<string, unknown> | null;
@@ -638,6 +647,27 @@ export async function createResumeOutput(
   );
   if (!res.ok) {
     throw new Error(`createResumeOutput failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as ResumeOutputResponse;
+}
+
+/** Session-free ATS PDF: template + resume + job description (all required). */
+export async function createStandaloneResumeOutput(body: {
+  template_id: string;
+  source_resume_id: string;
+  job_description_id: string;
+}): Promise<ResumeOutputResponse> {
+  const res = await fetch(`${apiBaseUrl()}/api/v1/resume-outputs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      template_id: body.template_id,
+      source_resume_id: body.source_resume_id,
+      job_description_id: body.job_description_id,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`createStandaloneResumeOutput failed ${res.status}: ${await readErrorBody(res)}`);
   }
   return (await res.json()) as ResumeOutputResponse;
 }

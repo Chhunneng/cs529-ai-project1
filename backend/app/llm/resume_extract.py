@@ -51,7 +51,7 @@ GLOBAL:
 - Do not invent employers, dates, or metrics; only use what the text supports.
 - Avoid noisy rows: every row should add new information.
 
-sections_flat: [] unless a block truly cannot be represented; then one {title, content} per odd block.
+sections_flat: [] unless a block truly cannot be represented; then one {{title, content}} per odd block.
 
 Use `_schema_version`: 1.
 --- Resume text ---

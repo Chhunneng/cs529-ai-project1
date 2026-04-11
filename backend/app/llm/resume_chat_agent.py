@@ -46,7 +46,16 @@ def _tool_names_from_items(result: RunResult) -> list[str]:
 async def _max_turns_handler(
     inp: RunErrorHandlerInput[ResumeAgentContext],
 ) -> RunErrorHandlerResult:
-    log.warning("agent_max_turns", session_id=str(inp.context.context.chat_session_id))
+    correlation = (
+        str(inp.context.context.chat_session_id)
+        if inp.context.context.chat_session_id is not None
+        else (
+            str(inp.context.context.render_output_id)
+            if inp.context.context.render_output_id is not None
+            else "unknown"
+        )
+    )
+    log.warning("agent_max_turns", session_id=correlation)
     return RunErrorHandlerResult(
         final_output=ResumePdfMessageOutput(
             assistant_message=(

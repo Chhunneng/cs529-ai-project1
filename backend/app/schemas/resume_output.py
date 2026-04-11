@@ -10,11 +10,19 @@ class ResumeOutputCreateBody(BaseModel):
     job_description_id: uuid.UUID | None = None
 
 
+class StandaloneResumePdfCreateBody(BaseModel):
+    """Create an ATS-oriented PDF export without linking a chat session."""
+
+    template_id: uuid.UUID
+    source_resume_id: uuid.UUID
+    job_description_id: uuid.UUID
+
+
 class ResumeOutputResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    session_id: uuid.UUID
+    session_id: uuid.UUID | None
     template_id: uuid.UUID | None
     status: str
     input_json: dict | None

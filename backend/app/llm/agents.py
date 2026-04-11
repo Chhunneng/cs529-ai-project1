@@ -5,7 +5,6 @@ from app.core.config import settings
 from app.llm.schema import (
     JobDescriptionParserOutput,
     LatexResumeSampleOutput,
-    ResumeFillAtsV1,
     ResumePdfMessageOutput,
     ResumeProfileV1,
     ResumeTailorOutput,
@@ -25,7 +24,7 @@ from app.llm._instructions import (
     LATEX_RESUME_SAMPLE_WRITER_INSTRUCTIONS,
     RESUME_AGENT_INSTRUCTIONS,
     RESUME_EXTRACT_INSTRUCTIONS,
-    RESUME_FILL_INSTRUCTIONS,
+    RESUME_RENDER_AUTOMATION_INSTRUCTIONS,
     RESUME_TAILOR_INSTRUCTIONS,
 )
 
@@ -128,10 +127,18 @@ RESUME_PDF_AGENT = Agent(
 )
 
 
-RESUME_FILL_AGENT = Agent(
-    name="ResumeFill",
-    instructions=RESUME_FILL_INSTRUCTIONS,
+RENDER_RESUME_AUTOMATION_AGENT = Agent(
+    name="RenderResumeAutomation",
+    instructions=RESUME_RENDER_AUTOMATION_INSTRUCTIONS,
     model=settings.openai.model,
-    output_type=ResumeFillAtsV1,
-    tools=[],
+    output_type=LatexResumeSampleOutput,
+    model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
+    tools=[
+        get_full_resume_text,
+        get_resume_excerpt,
+        search_in_resume,
+        get_active_job_description,
+        get_resume_template_latex,
+        check_latex_compiles_on_server,
+    ],
 )

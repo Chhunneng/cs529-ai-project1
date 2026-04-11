@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
@@ -121,6 +122,10 @@ async def fix_resume_template_latex(body: ResumeTemplateFixBody) -> StreamingRes
 @router.get("/{template_id}/preview-pdf")
 async def download_template_preview_pdf(
     template: ResumeTemplate = Depends(get_resume_template_or_404),
+    disposition: Literal["inline", "attachment"] = Query(
+        default="attachment",
+        description='Use "inline" to open in the browser PDF viewer; "attachment" to download.',
+    ),
 ) -> Response:
     """
     Compile stored LaTeX as-is and return PDF (no placeholder filling; template must be valid TeX).
@@ -143,7 +148,7 @@ async def download_template_preview_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
     )
 
 

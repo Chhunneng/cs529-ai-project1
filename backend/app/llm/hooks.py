@@ -18,8 +18,17 @@ class ResumePdfAgentToolTraceHooks(RunHooksBase[ResumeAgentContext, Agent[Resume
     ) -> None:
         name = getattr(tool, "name", None) or type(tool).__name__
         context.context.tool_trace.append(str(name))
+        correlation = (
+            str(context.context.chat_session_id)
+            if context.context.chat_session_id is not None
+            else (
+                str(context.context.render_output_id)
+                if context.context.render_output_id is not None
+                else "unknown"
+            )
+        )
         log.info(
             "chat_agent_tool",
             tool=str(name),
-            session_id=str(context.context.chat_session_id),
+            session_id=correlation,
         )

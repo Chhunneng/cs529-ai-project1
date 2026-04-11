@@ -118,10 +118,14 @@ export function TemplateEditor({
                 variant="outline"
                 disabled={loading || saving}
                 onClick={() => {
-                  window.open(resumeTemplatePreviewPdfUrl(template.id), "_blank", "noopener,noreferrer");
+                  window.open(
+                    resumeTemplatePreviewPdfUrl(template.id, { disposition: "inline" }),
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
                 }}
               >
-                Download PDF preview
+                Preview PDF
               </Button>
               <Button type="button" disabled={saving} onClick={() => void handleSave()}>
                 {saving ? "Saving…" : "Save template"}

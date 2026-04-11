@@ -10,16 +10,19 @@ from sqlalchemy import select, update
 
 from app.core.config import settings
 from app.db.session import AsyncSessionMaker
-from app.models.job_description import JobDescription
-from app.models.resume import Resume
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
 from app.queue_jobs import RenderResumeJob
 from app.features.latex.service import compile_latex_to_pdf
-from app.llm.resume_fill import generate_resume_fill
-from app.worker.tex_renderer import render_ats_v1
+from app.llm.context import ResumeAgentContext
+from app.llm.render_resume_agent import run_render_resume_automation
 
 log = structlog.get_logger()
+
+_RENDER_BATCH_USER_MESSAGE = (
+    "Generate the final resume LaTeX for this queued PDF export. "
+    "Use tools as needed, then return latex_resume_content with the full compilable document."
+)
 
 
 async def _set_output_running(output_id: uuid.UUID) -> None:
@@ -88,35 +91,41 @@ async def _fetch_render_context(output_id: uuid.UUID) -> dict[str, Any]:
         }
 
 
-def _truncate_resume_for_fill(text: str, limit: int = 6000) -> str:
-    if len(text) <= limit:
-        return text
-    return text[:limit].rstrip() + "…"
+def _coerce_input_json(raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return dict(raw) if isinstance(raw, dict) else {}
 
 
-async def _fetch_resume_text(resume_id: uuid.UUID) -> str | None:
-    async with AsyncSessionMaker() as db:
-        r = await db.get(Resume, resume_id)
-        if r is None:
-            return None
-        if r.parsed_json is not None:
-            try:
-                return _truncate_resume_for_fill(
-                    json.dumps(r.parsed_json, ensure_ascii=False)
-                )
-            except Exception:
-                pass
-        if r.content_text and r.content_text.strip():
-            return _truncate_resume_for_fill(r.content_text.strip())
-        return None
-
-
-async def _fetch_jd_text(jd_id: uuid.UUID) -> str | None:
-    async with AsyncSessionMaker() as db:
-        jd = await db.scalar(select(JobDescription).where(JobDescription.id == jd_id))
-        if jd is None:
-            return None
-        return str(jd.raw_text)
+def _build_resume_agent_context(
+    *,
+    output_id: uuid.UUID,
+    template_id: uuid.UUID,
+    raw_input: dict[str, Any],
+    chat_session_id: uuid.UUID | None,
+) -> ResumeAgentContext:
+    source_resume_id_raw = raw_input.get("source_resume_id")
+    job_description_id_raw = raw_input.get("job_description_id")
+    resume_id: uuid.UUID | None = None
+    job_description_id: uuid.UUID | None = None
+    if source_resume_id_raw:
+        resume_id = uuid.UUID(str(source_resume_id_raw))
+    if job_description_id_raw:
+        job_description_id = uuid.UUID(str(job_description_id_raw))
+    return ResumeAgentContext(
+        tool_trace=[],
+        job_description_id=job_description_id,
+        chat_session_id=chat_session_id,
+        render_output_id=output_id,
+        resume_id=resume_id,
+        resume_template_id=template_id,
+    )
 
 
 async def handle_render_resume(job: RenderResumeJob) -> None:
@@ -127,39 +136,33 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
 
     try:
         ctx = await _fetch_render_context(output_id)
-        template_id = str(ctx["template_id"])
+        template_id = ctx["template_id"]
+        if not isinstance(template_id, uuid.UUID):
+            template_id = uuid.UUID(str(template_id))
+
         latex_source = ctx.get("latex_source")
-
-        raw_input = ctx.get("input_json") or {}
-        if isinstance(raw_input, str):
-            raw_input = json.loads(raw_input)
-
-        source_resume_id_raw = raw_input.get("source_resume_id")
-        job_description_id_raw = raw_input.get("job_description_id")
-
-        resume_context = ""
-        if source_resume_id_raw:
-            rid = uuid.UUID(str(source_resume_id_raw))
-            rtxt = await _fetch_resume_text(rid)
-            if rtxt:
-                resume_context = rtxt
-
-        jd_context: str | None = None
-        if job_description_id_raw:
-            jdid = uuid.UUID(str(job_description_id_raw))
-            jd_context = await _fetch_jd_text(jdid)
-
-        data = await generate_resume_fill(
-            resume_context=resume_context
-            or "(no structured resume on file — invent plausible placeholder content)",
-            job_description_context=jd_context,
-        )
-
         if not isinstance(latex_source, str) or not latex_source.strip():
             raise RuntimeError(f"Template {template_id} has no LaTeX source in the database")
 
-        template_tex = latex_source.strip()
-        tex_body = render_ats_v1(template_tex=template_tex, data=data)
+        raw_input = _coerce_input_json(ctx.get("input_json"))
+        chat_session_id = ctx.get("session_id")
+        if chat_session_id is not None and not isinstance(chat_session_id, uuid.UUID):
+            chat_session_id = uuid.UUID(str(chat_session_id))
+
+        tool_context = _build_resume_agent_context(
+            output_id=output_id,
+            template_id=template_id,
+            raw_input=raw_input,
+            chat_session_id=chat_session_id if isinstance(chat_session_id, uuid.UUID) else None,
+        )
+
+        agent_output = await run_render_resume_automation(
+            user_prompt=_RENDER_BATCH_USER_MESSAGE,
+            tool_context=tool_context,
+        )
+        tex_body = agent_output.latex_resume_content.strip()
+        if not tex_body:
+            raise RuntimeError("Render automation returned empty LaTeX")
 
         out_dir = Path(settings.storage.artifacts_dir) / str(output_id)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -171,7 +174,8 @@ async def handle_render_resume(job: RenderResumeJob) -> None:
         pdf_path.write_bytes(pdf_bytes)
 
         merged_input: dict[str, Any] = dict(raw_input) if isinstance(raw_input, dict) else {}
-        merged_input["fill"] = data.model_dump()
+        merged_input["generation"] = "agent_latex_v1"
+        merged_input["tool_trace"] = list(tool_context.tool_trace)
 
         await _set_output_succeeded(
             output_id,

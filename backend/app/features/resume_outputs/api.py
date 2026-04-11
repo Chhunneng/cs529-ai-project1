@@ -13,9 +13,14 @@ from app.db.session import get_db_session
 from app.models.chat_session import ChatSession
 from app.models.resume_output import ResumeOutput
 from app.schemas.pagination import PaginatedResumeOutputsResponse
-from app.schemas.resume_output import ResumeOutputCreateBody, ResumeOutputResponse
+from app.schemas.resume_output import (
+    ResumeOutputCreateBody,
+    ResumeOutputResponse,
+    StandaloneResumePdfCreateBody,
+)
 from app.features.resume_outputs.service import (
     create_resume_output_and_enqueue,
+    create_standalone_resume_output_and_enqueue,
     delete_resume_output_row,
 )
 
@@ -32,13 +37,33 @@ async def create_resume_output(
     session: ChatSession = Depends(get_session_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> ResumeOutputResponse:
-    resume_output = await create_resume_output_and_enqueue(
-        db,
-        session=session,
-        template_id=body.template_id,
-        source_resume_id=body.source_resume_id,
-        job_description_id=body.job_description_id,
-    )
+    try:
+        resume_output = await create_resume_output_and_enqueue(
+            db,
+            session=session,
+            template_id=body.template_id,
+            source_resume_id=body.source_resume_id,
+            job_description_id=body.job_description_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return resume_output
+
+
+@router.post("/resume-outputs", response_model=ResumeOutputResponse, status_code=202)
+async def create_standalone_resume_output(
+    body: StandaloneResumePdfCreateBody,
+    db: AsyncSession = Depends(get_db_session),
+) -> ResumeOutputResponse:
+    try:
+        resume_output = await create_standalone_resume_output_and_enqueue(
+            db,
+            template_id=body.template_id,
+            source_resume_id=body.source_resume_id,
+            job_description_id=body.job_description_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return resume_output
 
 

@@ -23,8 +23,8 @@ class RenderResumeJob(BaseModel):
 
     type: Literal["render_resume"] = "render_resume"
     output_id: str
-    session_id: str
     template_id: str
+    session_id: str | None = None
 
 
 class ParseResumeJob(BaseModel):

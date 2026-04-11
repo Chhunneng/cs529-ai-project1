@@ -3,25 +3,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-  createResumeOutput,
+  createStandaloneResumeOutput,
   deleteResumeOutput,
   deleteSessionPdfArtifact,
   getResumeOutput,
-  getSession,
+  listJobDescriptions,
   listPdfArtifacts,
   listResumes,
   listResumeOutputs,
   listResumeTemplates,
-  listSessions,
   resumeOutputPdfUrl,
   sessionPdfArtifactFileUrl,
+  type JobDescriptionResponse,
   type PdfArtifactListItem,
   type ResumeListItem,
   type ResumeOutputResponse,
   type ResumeTemplateListItem,
-  type SessionResponse,
 } from "@/lib/api";
-import { AppPageHeader } from "@/components/layout/app-page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -36,6 +34,7 @@ import {
 import { SearchableResourceCombobox } from "@/components/ui/searchable-resource-combobox";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDateOnlyUtc, formatDateTimeUtc } from "@/lib/format-date";
 import { SELECT_NONE as NONE } from "@/lib/select-display";
 import { cn } from "@/lib/utils";
 
@@ -50,20 +49,27 @@ function shortId(id: string) {
   return `${id.slice(0, 8)}…`;
 }
 
+function jobDescriptionPickerLabel(job: JobDescriptionResponse): string {
+  const line = job.raw_text.trim().split("\n")[0]?.trim();
+  if (line && line.length > 0) {
+    return line.length > 72 ? `${line.slice(0, 72)}…` : line;
+  }
+  return shortId(job.id);
+}
+
 export function OutputsPage() {
-  const [sessions, setSessions] = useState<SessionResponse[]>([]);
-  const [sessionsTotal, setSessionsTotal] = useState(0);
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
   const [resumesTotal, setResumesTotal] = useState(0);
+  const [jobDescriptions, setJobDescriptions] = useState<JobDescriptionResponse[]>([]);
+  const [jobDescriptionsTotal, setJobDescriptionsTotal] = useState(0);
   const [templates, setTemplates] = useState<ResumeTemplateListItem[]>([]);
   const [templatesTotal, setTemplatesTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [sessionId, setSessionId] = useState<string>(NONE);
   const [resumeId, setResumeId] = useState<string>(NONE);
+  const [jobDescriptionId, setJobDescriptionId] = useState<string>(NONE);
   const [templateId, setTemplateId] = useState<string>(NONE);
-  const [activeJdId, setActiveJdId] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [lastOutput, setLastOutput] = useState<ResumeOutputResponse | null>(null);
@@ -108,6 +114,16 @@ export function OutputsPage() {
       });
       setTemplates(t.items);
       setTemplatesTotal(t.total);
+    } catch {
+      /* keep */
+    }
+  }, []);
+
+  const loadJobDescriptionsPicker = useCallback(async () => {
+    try {
+      const j = await listJobDescriptions({ limit: PICK, offset: 0 });
+      setJobDescriptions(j.items);
+      setJobDescriptionsTotal(j.total);
     } catch {
       /* keep */
     }
@@ -194,26 +210,23 @@ export function OutputsPage() {
     setNotice(null);
     setLoading(true);
     try {
-      const [s, r, t, outs, arts] = await Promise.all([
-        listSessions({ limit: PICK, offset: 0 }),
+      const [r, j, t, outs, arts] = await Promise.all([
         listResumes({ limit: PICK, offset: 0 }),
+        listJobDescriptions({ limit: PICK, offset: 0 }),
         listResumeTemplates({ limit: PICK, offset: 0 }),
         listResumeOutputs({ limit: LIST_LIMIT, offset: 0 }),
         listPdfArtifacts({ limit: LIST_LIMIT, offset: 0 }),
       ]);
-      setSessions(s.items);
-      setSessionsTotal(s.total);
       setResumes(r.items);
       setResumesTotal(r.total);
+      setJobDescriptions(j.items);
+      setJobDescriptionsTotal(j.total);
       setTemplates(t.items);
       setTemplatesTotal(t.total);
       setExportOutputs(outs.items);
       setExportTotal(outs.total);
       setChatArtifacts(arts.items);
       setChatArtifactsTotal(arts.total);
-      setSessionId((prev) =>
-        prev !== NONE ? prev : (s.items[0]?.id ? String(s.items[0].id) : NONE),
-      );
       setTemplateId((prev) =>
         prev !== NONE ? prev : (t.items[0]?.id ? String(t.items[0].id) : NONE),
       );
@@ -228,32 +241,14 @@ export function OutputsPage() {
     void loadAll();
   }, [loadAll]);
 
-  useEffect(() => {
-    if (sessionId === NONE) {
-      setActiveJdId(null);
-      return;
-    }
-    let cancelled = false;
-    getSession(sessionId)
-      .then((s) => {
-        if (!cancelled) setActiveJdId(s.job_description_id);
-      })
-      .catch(() => {
-        if (!cancelled) setActiveJdId(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId]);
-
-  const sessionOptions = useMemo(
+  const jobDescriptionOptions = useMemo(
     () =>
-      sessions.map((s) => ({
-        value: String(s.id),
-        label: `${String(s.id).slice(0, 8)}…`,
-        description: new Date(s.created_at).toLocaleDateString(),
+      jobDescriptions.map((jd) => ({
+        value: jd.id,
+        label: jobDescriptionPickerLabel(jd),
+        description: formatDateOnlyUtc(jd.created_at),
       })),
-    [sessions],
+    [jobDescriptions],
   );
 
   const resumeOptions = useMemo(
@@ -261,7 +256,7 @@ export function OutputsPage() {
       resumes.map((r) => ({
         value: r.id,
         label: r.original_filename?.trim() || `${r.id.slice(0, 8)}…`,
-        description: new Date(r.created_at).toLocaleDateString(),
+        description: formatDateOnlyUtc(r.created_at),
       })),
     [resumes],
   );
@@ -277,8 +272,13 @@ export function OutputsPage() {
   );
 
   const canGenerate = useMemo(() => {
-    return !busy && sessionId !== NONE && templateId !== NONE;
-  }, [busy, sessionId, templateId]);
+    return (
+      !busy &&
+      templateId !== NONE &&
+      resumeId !== NONE &&
+      jobDescriptionId !== NONE
+    );
+  }, [busy, templateId, resumeId, jobDescriptionId]);
 
   async function handleGenerate() {
     if (!canGenerate) return;
@@ -286,10 +286,10 @@ export function OutputsPage() {
     setNotice(null);
     setLastOutput(null);
     try {
-      const initial = await createResumeOutput(sessionId, {
+      const initial = await createStandaloneResumeOutput({
         template_id: templateId,
-        source_resume_id: resumeId === NONE ? null : resumeId,
-        job_description_id: activeJdId ?? null,
+        source_resume_id: resumeId,
+        job_description_id: jobDescriptionId,
       });
       let cur = initial;
       const deadline = Date.now() + 180_000;
@@ -312,7 +312,7 @@ export function OutputsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <>
       <Dialog
         open={previewOpen}
         onOpenChange={(open) => {
@@ -336,11 +336,6 @@ export function OutputsPage() {
         </DialogContent>
       </Dialog>
 
-      <AppPageHeader
-        title="PDF exports"
-        description="Build a resume PDF from a chat session, optional resume, and the job posting you set as active."
-      />
-
       <div className="flex flex-col gap-4 p-4 md:p-5">
         {notice ? (
           <Alert variant="destructive" className="border-destructive/50">
@@ -353,8 +348,8 @@ export function OutputsPage() {
           <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15">
             <CardTitle className="text-base font-semibold tracking-tight">Generate PDF</CardTitle>
             <CardDescription className="max-w-prose text-sm leading-relaxed">
-              PDF layout comes from the LaTeX template you pick—not from chat styling. If the session has an active
-              job posting, it is included. You can also start an export from the Chat workspace.
+              PDF layout comes from the LaTeX template you pick. The app fills the template using your resume text and
+              the job description you select (tailored for ATS-friendly wording).
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 p-4">
@@ -365,30 +360,7 @@ export function OutputsPage() {
                 <div className="flex flex-col gap-3 md:grid md:grid-cols-3">
                   <div className="flex flex-col gap-2">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Session
-                    </div>
-                    <SearchableResourceCombobox
-                      value={sessionId}
-                      onValueChange={(v) => setSessionId(v)}
-                      options={sessionOptions}
-                      noneValue={NONE}
-                      noneLabel="No session selected"
-                      placeholder="Choose a session…"
-                      searchPlaceholder="Filter loaded sessions…"
-                      totalHint={
-                        sessionsTotal > sessions.length
-                          ? `Showing ${sessions.length} of ${sessionsTotal}`
-                          : sessionsTotal > 0
-                            ? `${sessionsTotal} chats`
-                            : null
-                      }
-                    />
-                    <div className="text-xs text-muted-foreground">Active JD: {activeJdId ?? "—"}</div>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Resume (optional)
+                      Resume
                     </div>
                     <SearchableResourceCombobox
                       value={resumeId}
@@ -404,6 +376,29 @@ export function OutputsPage() {
                           ? `Showing ${resumes.length} of ${resumesTotal}`
                           : resumesTotal > 0
                             ? `${resumesTotal} resumes`
+                            : null
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Job description
+                    </div>
+                    <SearchableResourceCombobox
+                      value={jobDescriptionId}
+                      onValueChange={(v) => setJobDescriptionId(v)}
+                      options={jobDescriptionOptions}
+                      noneValue={NONE}
+                      noneLabel="No job description selected"
+                      placeholder="Choose a job description…"
+                      searchPlaceholder="Reload list…"
+                      onQueryChange={() => void loadJobDescriptionsPicker()}
+                      totalHint={
+                        jobDescriptionsTotal > jobDescriptions.length
+                          ? `Showing ${jobDescriptions.length} of ${jobDescriptionsTotal}`
+                          : jobDescriptionsTotal > 0
+                            ? `${jobDescriptionsTotal} saved`
                             : null
                       }
                     />
@@ -491,8 +486,8 @@ export function OutputsPage() {
           <CardHeader className="flex flex-col gap-1 border-b border-border/60 bg-muted/15">
             <CardTitle className="text-base font-semibold tracking-tight">PDF exports (from this page)</CardTitle>
             <CardDescription className="max-w-prose text-sm leading-relaxed">
-              Every time you click Generate PDF (here or elsewhere using the same API), a row is stored. Preview opens
-              inside the app; Download opens the file in a new tab so your browser can save it.
+              Each export is stored as its own row. Preview opens inside the app; Download opens the file in a new tab
+              so your browser can save it.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -509,7 +504,7 @@ export function OutputsPage() {
                     <thead>
                       <tr className="border-b border-border/70 bg-muted/20 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                         <th className="px-3 py-2 font-medium whitespace-nowrap">Created</th>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">Session</th>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">Chat session</th>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">Status</th>
                         <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Actions</th>
                       </tr>
@@ -522,10 +517,10 @@ export function OutputsPage() {
                         return (
                           <tr key={row.id} className="border-b border-border/60 last:border-0">
                             <td className="px-3 py-3 align-middle text-muted-foreground whitespace-nowrap">
-                              {new Date(row.created_at).toLocaleString()}
+                              {formatDateTimeUtc(row.created_at)}
                             </td>
                             <td className="px-3 py-3 align-middle font-mono text-xs text-muted-foreground">
-                              {shortId(row.session_id)}
+                              {row.session_id ? shortId(row.session_id) : "—"}
                             </td>
                             <td className="px-3 py-3 align-middle">
                               <Badge variant={row.status === "succeeded" ? "default" : "secondary"} className="w-fit">
@@ -626,7 +621,7 @@ export function OutputsPage() {
                         return (
                           <tr key={row.id} className="border-b border-border/60 last:border-0">
                             <td className="px-3 py-3 align-middle text-muted-foreground whitespace-nowrap">
-                              {new Date(row.created_at).toLocaleString()}
+                              {formatDateTimeUtc(row.created_at)}
                             </td>
                             <td className="px-3 py-3 align-middle font-mono text-xs text-muted-foreground">
                               {shortId(row.session_id)}
@@ -682,6 +677,6 @@ export function OutputsPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </>
   );
 }

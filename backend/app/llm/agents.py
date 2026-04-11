@@ -25,6 +25,7 @@ from app.llm._instructions import (
     RESUME_AGENT_INSTRUCTIONS,
     RESUME_EXTRACT_INSTRUCTIONS,
     RESUME_FILL_INSTRUCTIONS,
+    RESUME_TAILOR_INSTRUCTIONS,
 )
 
 
@@ -52,13 +53,20 @@ LATEX_RESUME_FIX_AGENT = Agent(
     ],
 )
 
-
 RESUME_EXTRACT_AGENT = Agent(
     name="Resume Extract Agent",
     instructions=RESUME_EXTRACT_INSTRUCTIONS,
     model=settings.openai.model,
     model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
     output_type=ResumeProfileV1,
+)
+
+RESUME_TAILOR_AGENT = Agent(
+    name="Resume Tailor Agent",
+    instructions=RESUME_TAILOR_INSTRUCTIONS,
+    model=settings.openai.model,
+    model_settings=ModelSettings(reasoning=Reasoning(effort="medium")),
+    tools=[get_resume_excerpt]
 )
 
 

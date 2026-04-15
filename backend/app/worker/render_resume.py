@@ -21,7 +21,11 @@ log = structlog.get_logger()
 
 _RENDER_BATCH_USER_MESSAGE = (
     "Generate the final resume LaTeX for this queued PDF export. "
-    "Use tools as needed, then return latex_resume_content with the full compilable document."
+    "Use tools as needed, then return latex_resume_content with the full compilable document. "
+    "When a job description is linked, maximize honest keyword and phrase overlap with the JD: "
+    "rephrase existing bullets to use JD vocabulary only where the resume already supports it; "
+    "keep every skill or capability that appears in the loaded resume (union with defensible JD terms); "
+    "prefer ATS-friendly bullets and headings. Do not invent employers, dates, tools, or metrics."
 )
 
 

@@ -51,7 +51,7 @@ async def run_render_resume_automation(
     tool_context: ResumeAgentContext,
 ) -> LatexResumeSampleOutput:
     """Run the render automation agent (tools + structured LaTeX output, no session memory)."""
-    ensure_agents_openai_configured()
+    # ensure_agents_openai_configured()
     hooks = ResumePdfAgentToolTraceHooks()
     error_handlers: RunErrorHandlers[ResumeAgentContext] = {"max_turns": _max_turns_handler_render}
 

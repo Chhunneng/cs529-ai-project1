@@ -1,0 +1,2 @@
+"""Resume application use-cases."""
+

@@ -1,0 +1,2 @@
+"""Resume-output domain contracts."""
+

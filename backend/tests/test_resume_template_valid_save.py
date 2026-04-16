@@ -15,8 +15,7 @@ _MIN_TEX = r"\documentclass{article}\begin{document}x\end{document}"
 @pytest.mark.asyncio
 async def test_resume_template_valid_save_scenarios() -> None:
     """
-    Single async test: sync TestClient-based tests elsewhere bind asyncpg to another loop;
-    dispose the engine first so this coroutine's loop owns fresh pool connections.
+    Single async test: ensure the engine pool is clean for this event loop.
     """
     await engine.dispose()
 

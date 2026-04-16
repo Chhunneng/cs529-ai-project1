@@ -1,0 +1,2 @@
+"""LaTeX infrastructure adapters."""
+

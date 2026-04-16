@@ -2,12 +2,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.db.base import Base
-from app.models.common import UUIDPrimaryKeyMixin
+from app.models.common import UUID_TYPE, UUIDPrimaryKeyMixin
 
 
 class PdfArtifact(Base, UUIDPrimaryKeyMixin):
@@ -17,7 +16,7 @@ class PdfArtifact(Base, UUIDPrimaryKeyMixin):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False
+        UUID_TYPE, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False
     )
     storage_relpath: Mapped[str] = mapped_column(Text, nullable=False)
     mime_type: Mapped[str] = mapped_column(Text, nullable=False)

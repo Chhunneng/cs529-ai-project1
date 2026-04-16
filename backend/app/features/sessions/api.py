@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import get_session_or_404
+from app.api.v1.deps import get_pdf_artifact_for_session_or_404, get_session_or_404
 from app.core.config import settings
 from app.db.session import get_db_session
 from app.models.chat_session import ChatSession
@@ -171,24 +171,14 @@ async def create_session_message(
 @router.get("/{session_id}/pdf-artifacts/{pdf_artifact_id}/file")
 async def download_session_pdf_artifact(
     pdf_artifact_id: uuid.UUID,
-    session: ChatSession = Depends(get_session_or_404),
-    db: AsyncSession = Depends(get_db_session),
+    artifact: PdfArtifact = Depends(get_pdf_artifact_for_session_or_404),
     disposition: Literal["inline", "attachment"] = Query(
         default="attachment",
         description='Use "inline" for browser preview (e.g. iframe); "attachment" encourages download.',
     ),
 ) -> FileResponse:
-    row = await db.scalar(
-        select(PdfArtifact).where(
-            PdfArtifact.id == pdf_artifact_id,
-            PdfArtifact.session_id == session.id,
-        )
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="PDF artifact not found")
-
     root = Path(settings.storage.artifacts_dir).resolve()
-    path = (root / row.storage_relpath).resolve()
+    path = (root / artifact.storage_relpath).resolve()
     try:
         path.relative_to(root)
     except ValueError:
@@ -198,7 +188,7 @@ async def download_session_pdf_artifact(
 
     return FileResponse(
         path,
-        media_type=row.mime_type,
+        media_type=artifact.mime_type,
         filename=f"resume-{pdf_artifact_id}.pdf",
         content_disposition_type=disposition,
     )
@@ -209,19 +199,10 @@ async def download_session_pdf_artifact(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_session_pdf_artifact(
-    pdf_artifact_id: uuid.UUID,
-    session: ChatSession = Depends(get_session_or_404),
+    artifact: PdfArtifact = Depends(get_pdf_artifact_for_session_or_404),
     db: AsyncSession = Depends(get_db_session),
 ) -> Response:
-    row = await db.scalar(
-        select(PdfArtifact).where(
-            PdfArtifact.id == pdf_artifact_id,
-            PdfArtifact.session_id == session.id,
-        )
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="PDF artifact not found")
-    unlink_pdf_artifact_file(storage_relpath=row.storage_relpath)
-    await db.delete(row)
+    unlink_pdf_artifact_file(storage_relpath=artifact.storage_relpath)
+    await db.delete(artifact)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

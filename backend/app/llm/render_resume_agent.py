@@ -13,7 +13,6 @@ import structlog
 
 from app.core.config import settings
 from app.llm.agents import RENDER_RESUME_AUTOMATION_AGENT
-from app.llm.agents_bootstrap import ensure_agents_openai_configured
 from app.llm.context import ResumeAgentContext
 from app.llm.hooks import ResumePdfAgentToolTraceHooks
 from app.llm.schema import LatexResumeSampleOutput
@@ -51,7 +50,6 @@ async def run_render_resume_automation(
     tool_context: ResumeAgentContext,
 ) -> LatexResumeSampleOutput:
     """Run the render automation agent (tools + structured LaTeX output, no session memory)."""
-    # ensure_agents_openai_configured()
     hooks = ResumePdfAgentToolTraceHooks()
     error_handlers: RunErrorHandlers[ResumeAgentContext] = {"max_turns": _max_turns_handler_render}
 

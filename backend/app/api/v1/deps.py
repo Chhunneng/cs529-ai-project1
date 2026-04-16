@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.models.chat_session import ChatSession
 from app.models.job_description import JobDescription
+from app.models.pdf_artifact import PdfArtifact
 from app.models.resume import Resume
 from app.models.resume_output import ResumeOutput
 from app.models.resume_template import ResumeTemplate
@@ -62,3 +63,19 @@ async def get_job_description_or_404(
     if job_description is None:
         raise HTTPException(status_code=404, detail="Job description not found")
     return job_description
+
+
+async def get_pdf_artifact_for_session_or_404(
+    pdf_artifact_id: uuid.UUID,
+    session: ChatSession = Depends(get_session_or_404),
+    db: AsyncSession = Depends(get_db_session),
+) -> PdfArtifact:
+    artifact = await db.scalar(
+        select(PdfArtifact).where(
+            PdfArtifact.id == pdf_artifact_id,
+            PdfArtifact.session_id == session.id,
+        )
+    )
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="PDF artifact not found")
+    return artifact

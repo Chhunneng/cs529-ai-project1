@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+redis
+crewai
+crewai-tools[mcp]
+mcp>=1.26.0,<1.27.0

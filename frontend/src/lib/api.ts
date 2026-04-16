@@ -862,3 +862,323 @@ export function openAssistantReplyStream(
 
   return es;
 }
+
+// —— Interview practice ——
+
+export type InterviewSource = "jd" | "resume" | "both";
+export type InterviewQuestionStyle =
+  | "random"
+  | "technical"
+  | "behavioral"
+  | "domain"
+  | "language"
+  | "other";
+export type InterviewQuestionLevel = "random" | "easy" | "medium" | "hard";
+export type InterviewJobKind = "generate" | "refine";
+export type InterviewJobStatus = "pending" | "running" | "done" | "error";
+
+export type InterviewPracticeSessionResponse = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  resume_id: string | null;
+  job_description_id: string | null;
+};
+
+export type InterviewQuestionResponse = {
+  id: string;
+  practice_session_id: string;
+  created_at: string;
+  source: InterviewSource;
+  prompt: string;
+  sample_answer: string;
+  metadata_json: Record<string, unknown>;
+};
+
+export type InterviewGenerateEnqueueResponse = {
+  request_id: string;
+};
+
+export type InterviewJobStatusResponse = {
+  id: string;
+  practice_session_id: string;
+  kind: InterviewJobKind;
+  status: InterviewJobStatus;
+  created_at: string;
+  updated_at: string;
+  error_text: string | null;
+  result_json: Record<string, unknown> | null;
+};
+
+export type InterviewAnswerAttemptResponse = {
+  id: string;
+  question_id: string;
+  created_at: string;
+  user_answer: string;
+  feedback: string | null;
+  refined_answer: string | null;
+  scores_json: Record<string, unknown> | null;
+};
+
+export type InterviewRefineEnqueueResponse = {
+  request_id: string;
+  answer_attempt_id: string;
+};
+
+export async function createInterviewPracticeSession(body: {
+  resume_id?: string | null;
+  job_description_id?: string | null;
+}): Promise<InterviewPracticeSessionResponse> {
+  const res = await fetch(`${apiBaseUrl()}/api/v1/interview-practice/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      resume_id: body.resume_id ?? null,
+      job_description_id: body.job_description_id ?? null,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`createInterviewPracticeSession failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewPracticeSessionResponse;
+}
+
+export async function generateInterviewQuestions(
+  practiceSessionId: string,
+  body: {
+    source: InterviewSource;
+    count?: number;
+    question_style?: InterviewQuestionStyle;
+    level?: InterviewQuestionLevel;
+    focus_detail?: string | null;
+  },
+): Promise<InterviewGenerateEnqueueResponse> {
+  const payload: Record<string, unknown> = {
+    source: body.source,
+    count: body.count ?? 8,
+    question_style: body.question_style ?? "random",
+    level: body.level ?? "random",
+  };
+  if (body.focus_detail != null && String(body.focus_detail).trim() !== "") {
+    payload.focus_detail = String(body.focus_detail).trim();
+  }
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/sessions/${encodeURIComponent(practiceSessionId)}/generate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`generateInterviewQuestions failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewGenerateEnqueueResponse;
+}
+
+export async function listInterviewQuestions(
+  practiceSessionId: string,
+): Promise<InterviewQuestionResponse[]> {
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/sessions/${encodeURIComponent(practiceSessionId)}/questions`,
+  );
+  if (!res.ok) {
+    throw new Error(`listInterviewQuestions failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewQuestionResponse[];
+}
+
+export async function getInterviewJobRequest(requestId: string): Promise<InterviewJobStatusResponse> {
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/requests/${encodeURIComponent(requestId)}`,
+  );
+  if (!res.ok) {
+    throw new Error(`getInterviewJobRequest failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewJobStatusResponse;
+}
+
+/** Wait for generate/refine job completion via SSE (no client polling). */
+export async function streamInterviewJobUntilDone(
+  requestId: string,
+  opts?: { signal?: AbortSignal; maxWaitMs?: number },
+): Promise<InterviewJobStatusResponse> {
+  const maxWaitMs = opts?.maxWaitMs ?? 300_000;
+  const url = `${apiBaseUrl()}/api/v1/interview-practice/requests/${encodeURIComponent(requestId)}/stream`;
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort();
+  opts?.signal?.addEventListener("abort", onParentAbort);
+  const timer = setTimeout(() => controller.abort(), maxWaitMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`streamInterviewJobUntilDone failed ${res.status}: ${await readErrorBody(res)}`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) {
+      throw new Error("streamInterviewJobUntilDone: empty response body");
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lastJob: InterviewJobStatusResponse | null = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+      for (const block of parts) {
+        for (const line of block.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          let payload: Record<string, unknown>;
+          try {
+            payload = JSON.parse(line.slice(6)) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+          const eventType = payload.type;
+          if (eventType === "snapshot" || eventType === "update") {
+            const job = payload.job as InterviewJobStatusResponse;
+            lastJob = job;
+            if (job.status === "done" || job.status === "error") {
+              return job;
+            }
+          }
+          if (eventType === "error") {
+            throw new Error(String(payload.detail ?? "Interview job stream error"));
+          }
+          if (eventType === "timeout") {
+            throw new Error(String(payload.detail ?? "Interview job wait timed out"));
+          }
+        }
+      }
+    }
+    if (lastJob && (lastJob.status === "done" || lastJob.status === "error")) {
+      return lastJob;
+    }
+    throw new Error("Interview job stream ended before completion");
+  } finally {
+    clearTimeout(timer);
+    opts?.signal?.removeEventListener("abort", onParentAbort);
+  }
+}
+
+export async function postInterviewAnswer(params: {
+  questionId: string;
+  practiceSessionId: string;
+  user_answer: string;
+  refine?: boolean;
+}): Promise<InterviewAnswerAttemptResponse> {
+  const q = new URLSearchParams({ practice_session_id: params.practiceSessionId });
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/questions/${encodeURIComponent(params.questionId)}/answers?${q}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_answer: params.user_answer,
+        refine: params.refine ?? false,
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`postInterviewAnswer failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewAnswerAttemptResponse;
+}
+
+export async function postInterviewRefine(params: {
+  answerAttemptId: string;
+  practiceSessionId: string;
+}): Promise<InterviewRefineEnqueueResponse> {
+  const q = new URLSearchParams({ practice_session_id: params.practiceSessionId });
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/answers/${encodeURIComponent(params.answerAttemptId)}/refine?${q}`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new Error(`postInterviewRefine failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewRefineEnqueueResponse;
+}
+
+export async function getInterviewAnswerAttempt(params: {
+  answerAttemptId: string;
+  practiceSessionId: string;
+}): Promise<InterviewAnswerAttemptResponse> {
+  const q = new URLSearchParams({ practice_session_id: params.practiceSessionId });
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/answers/${encodeURIComponent(params.answerAttemptId)}?${q}`,
+  );
+  if (!res.ok) {
+    throw new Error(`getInterviewAnswerAttempt failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewAnswerAttemptResponse;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function pollInterviewJobRequest(
+  requestId: string,
+  opts?: { intervalMs?: number; maxWaitMs?: number; signal?: AbortSignal },
+): Promise<InterviewJobStatusResponse> {
+  const intervalMs = opts?.intervalMs ?? 1000;
+  const maxWaitMs = opts?.maxWaitMs ?? 120_000;
+  const started = Date.now();
+
+  while (true) {
+    if (opts?.signal?.aborted) {
+      throw new Error("pollInterviewJobRequest aborted");
+    }
+    const row = await getInterviewJobRequest(requestId);
+    if (row.status === "done" || row.status === "error") {
+      return row;
+    }
+    if (Date.now() - started > maxWaitMs) {
+      throw new Error("pollInterviewJobRequest: timed out waiting for job to finish");
+    }
+    await sleep(intervalMs);
+  }
+}
+
+export type PaginatedInterviewPracticeSessions = {
+  items: InterviewPracticeSessionResponse[];
+  total: number;
+};
+
+export async function listInterviewPracticeSessions(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<PaginatedInterviewPracticeSessions> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const qs = q.toString();
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/sessions${qs ? `?${qs}` : ""}`,
+  );
+  if (!res.ok) {
+    throw new Error(`listInterviewPracticeSessions failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as PaginatedInterviewPracticeSessions;
+}
+
+export type InterviewAnswerHistoryItem = {
+  question_id: string;
+  question_prompt: string;
+  attempt: InterviewAnswerAttemptResponse;
+};
+
+export async function listInterviewSessionAnswers(
+  practiceSessionId: string,
+): Promise<InterviewAnswerHistoryItem[]> {
+  const res = await fetch(
+    `${apiBaseUrl()}/api/v1/interview-practice/sessions/${encodeURIComponent(practiceSessionId)}/answers`,
+  );
+  if (!res.ok) {
+    throw new Error(`listInterviewSessionAnswers failed ${res.status}: ${await readErrorBody(res)}`);
+  }
+  return (await res.json()) as InterviewAnswerHistoryItem[];
+}

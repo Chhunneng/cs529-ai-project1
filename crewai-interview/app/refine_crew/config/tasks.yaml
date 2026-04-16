@@ -1,0 +1,27 @@
+refine_answer_task:
+  description: |
+    You are given the interview question, a reference ideal answer, and the user's answer. Coach the user using ONLY these inputs.
+
+    INTERVIEW QUESTION:
+    {question}
+
+    IDEAL ANSWER (reference):
+    {ideal_answer}
+
+    USER ANSWER (to coach):
+    {user_answer}
+
+    Produce:
+    - feedback: short bullets (strengths + missing pieces)
+    - refined_answer: a rewritten best-possible answer in 1-2 paragraphs
+    - scores: {overall: 0-10, clarity: 0-10, relevance: 0-10, confidence: 0-10}
+
+    Return ONLY valid JSON (no prose outside the JSON):
+    {
+      "feedback": "- ...\n- ...",
+      "refined_answer": "...",
+      "scores": {"overall": 0, "clarity": 0, "relevance": 0, "confidence": 0}
+    }
+  expected_output: >
+    A JSON object with feedback, refined_answer, and scores.
+  agent: answer_coach

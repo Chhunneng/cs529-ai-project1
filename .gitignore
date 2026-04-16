@@ -210,3 +210,6 @@ __marimo__/
 
 # Media
 data/
+
+# Test database
+.test.db

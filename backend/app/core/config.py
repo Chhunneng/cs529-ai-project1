@@ -20,12 +20,15 @@ class DatabaseSettings(BaseModel):
 
 
 class RedisSettings(BaseModel):
-    """Redis connection and the background job queue list key."""
+    """Redis connection, main agent queue, and CrewAI bridge queue keys."""
 
     model_config = ConfigDict(frozen=True)
 
     url: str
     queue_key: str
+    crewai_request_queue_key: str
+    crewai_processing_list_key: str
+    crewai_dead_letter_list_key: str
 
 
 class OpenAISettings(BaseModel):
@@ -77,6 +80,10 @@ class Settings(BaseSettings):
     redis_url: str
 
     queue_key: str = "queue:agent-jobs"
+    crewai_request_queue_key: str = "queue:crewai-interview-requests"
+    crewai_processing_list_key: str = "queue:crewai-interview-processing"
+    crewai_dead_letter_list_key: str = "queue:crewai-interview-dead-letter"
+    crewai_max_attempts: int = 3
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-5-nano"
@@ -112,7 +119,13 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def redis(self) -> RedisSettings:
-        return RedisSettings(url=self.redis_url, queue_key=self.queue_key)
+        return RedisSettings(
+            url=self.redis_url,
+            queue_key=self.queue_key,
+            crewai_request_queue_key=self.crewai_request_queue_key,
+            crewai_processing_list_key=self.crewai_processing_list_key,
+            crewai_dead_letter_list_key=self.crewai_dead_letter_list_key,
+        )
 
     @computed_field
     @property

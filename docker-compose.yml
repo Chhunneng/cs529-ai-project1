@@ -80,6 +80,49 @@ services:
     volumes:
       - ./data/artifacts:/data/artifacts
 
+  crewai-interview-worker:
+    build:
+      context: ./crewai-interview
+    command: ["python", "-m", "app.crewai_queue_consumer"]
+    env_file:
+      - ./.env
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      QUEUE_KEY: ${QUEUE_KEY:-queue:agent-jobs}
+      CREWAI_REQUEST_QUEUE_KEY: ${CREWAI_REQUEST_QUEUE_KEY:-queue:crewai-interview-requests}
+      CREWAI_PROCESSING_LIST_KEY: ${CREWAI_PROCESSING_LIST_KEY:-queue:crewai-interview-processing}
+      CREWAI_DEAD_LETTER_LIST_KEY: ${CREWAI_DEAD_LETTER_LIST_KEY:-queue:crewai-interview-dead-letter}
+      CREWAI_MAX_ATTEMPTS: ${CREWAI_MAX_ATTEMPTS:-3}
+      CREWAI_REQUEUE_PROCESSING_ON_START: ${CREWAI_REQUEUE_PROCESSING_ON_START:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CREWAI_LLM_MODEL: ${CREWAI_LLM_MODEL:-openai/gpt-4o-mini}
+      MCP_INTERVIEW_TOOLS_URL: ${MCP_INTERVIEW_TOOLS_URL:-http://mcp-interview-tools:8080/mcp}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CREWAI_TRACING_ENABLED: ${CREWAI_TRACING_ENABLED:-true}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mcp-interview-tools:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os,redis; redis.Redis.from_url(os.environ['REDIS_URL'], decode_responses=True).ping()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - ./crewai_tokens:/root/.config/crewai/
+
+  mcp-interview-tools:
+    build:
+      context: ./mcp/interview-tools
+    ports:
+      - "8081:8080"
+
   frontend:
     build:
       context: ./frontend

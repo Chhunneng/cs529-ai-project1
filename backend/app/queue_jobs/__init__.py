@@ -1,5 +1,17 @@
+from app.queue_jobs.crewai_bridge import (
+    CrewAiBridgeMessage,
+    CrewAiGenerateRequestMessage,
+    CrewAiRefineRequestMessage,
+    deserialize_crewai_bridge_message,
+    serialize_crewai_bridge_message,
+)
 from app.queue_jobs.payloads import (
     AgentJob,
+    InterviewGenerateJob,
+    InterviewGeneratePersistJob,
+    InterviewQuestionWire,
+    InterviewRefineJob,
+    InterviewRefinePersistJob,
     ParseResumeJob,
     RenderResumeJob,
     ResumePdfGenerationJob,
@@ -10,10 +22,20 @@ from app.queue_jobs.payloads import (
 
 __all__ = [
     "AgentJob",
+    "CrewAiBridgeMessage",
+    "CrewAiGenerateRequestMessage",
+    "CrewAiRefineRequestMessage",
+    "InterviewGenerateJob",
+    "InterviewGeneratePersistJob",
+    "InterviewQuestionWire",
+    "InterviewRefineJob",
+    "InterviewRefinePersistJob",
     "ParseResumeJob",
     "RenderResumeJob",
     "ResumePdfGenerationJob",
+    "deserialize_crewai_bridge_message",
     "deserialize_job",
     "parse_agent_job",
+    "serialize_crewai_bridge_message",
     "serialize_job",
 ]

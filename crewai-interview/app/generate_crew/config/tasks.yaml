@@ -1,0 +1,52 @@
+generate_questions_task:
+  description: |
+    USER SETTINGS (non-negotiable—follow these on every single question):
+    - question_style = {question_style}
+    - level = {level}
+    - source = {source}
+    - count = {count}
+    - focus_detail = {focus_detail}
+
+    CONTEXT TEXT (use only what applies to source):
+    - job_description_text: may be empty when source is "resume" only—that is OK.
+    - resume_text: required when source is "resume" or "both".
+
+    SOURCE RULES:
+    - source "resume": Use ONLY resume_text to tailor questions and sample answers. Do not require a job description.
+    - source "jd": Use job_description_text; resume may be empty.
+    - source "both": Use both texts together.
+
+    QUESTION_STYLE (apply to EVERY question’s content and to metadata.type):
+    - random: mix behavioral, technical, and role-fit; metadata.type may vary per item (behavioral | technical | mixed).
+    - technical: EVERY question MUST be technical (algorithms, system design, debugging, APIs, data structures, tools/stacks, tradeoffs, code organization). NO generic “tell me about a time” behavioral-only questions. metadata.type MUST be "technical" for every item.
+    - behavioral: EVERY question MUST be non-technical (STAR, teamwork, conflict, leadership). metadata.type MUST be "behavioral" for every item.
+    - domain: Every question centers on focus_detail; metadata should include "focus" with that topic.
+    - language: Every question involves the stack or language in focus_detail; metadata should include "focus" with that name.
+    - other: Follow focus_detail as the main theme.
+
+    LEVEL (apply to EVERY question’s difficulty and metadata.difficulty):
+    - random: vary difficulty across items; each metadata.difficulty is easy | medium | hard as appropriate.
+    - easy | medium | hard: EVERY question MUST match this difficulty (depth, specificity, rigor). metadata.difficulty MUST be exactly "{level}" for every item when level is not random.
+
+    OUTPUT FORMAT:
+    Each item must include:
+    - prompt: must clearly match the chosen question_style (technical vs behavioral, etc.)
+    - sample_answer: aligned to source; for technical style, include concrete technical substance
+    - metadata: { "type": "...", "difficulty": "...", "skills": ["..."] } matching the rules above.
+
+    Return ONLY valid JSON (no prose outside the JSON):
+    {
+      "questions": [
+        {
+          "prompt": "...",
+          "sample_answer": "...",
+          "metadata": {"type": "technical", "difficulty": "hard", "skills": ["..."]}
+        }
+      ]
+    }
+    The sample metadata values in the example are ILLUSTRATIVE: you MUST set type and difficulty to match
+    question_style={question_style} and level={level} for every row—do not copy behavioral/medium by default.
+  expected_output: >
+    JSON object with key "questions" (array of length {count}); each element has prompt, sample_answer,
+    and metadata whose type and difficulty match the user’s question_style and level.
+  agent: question_generator

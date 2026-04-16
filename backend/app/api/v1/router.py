@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes import (
     internal_latex,
+    interview_practice,
     job_descriptions,
     pdf_artifacts,
     resume_outputs,
@@ -18,4 +19,5 @@ api_router.include_router(resume_templates.router)
 api_router.include_router(resume_outputs.router)
 api_router.include_router(pdf_artifacts.router)
 api_router.include_router(job_descriptions.router)
+api_router.include_router(interview_practice.router)
 api_router.include_router(internal_latex.router, prefix="/internal", tags=["internal"])

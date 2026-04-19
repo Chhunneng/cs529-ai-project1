@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Menu } from "lucide-react";
 
 import { AppLogo } from "@/components/brand/app-logo";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { SessionResponse } from "@/lib/api";
 import { ChatSidebarPanel } from "@/components/layout/chat-sidebar-panel";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,7 @@ export function MobileAppNav({
           <div className="truncate text-xs text-muted-foreground">Menu &amp; chats</div>
         </div>
       </div>
+      <ThemeToggle />
     </div>
   );
 }

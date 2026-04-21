@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppPageHeader } from "@/components/layout/app-page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,6 +18,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Mic, MicOff } from "lucide-react";
 import {
   createInterviewPracticeSession,
   generateInterviewQuestions,
@@ -46,6 +47,22 @@ import { formatDateTimeUtc } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "interviewPracticeSessionId";
+
+type SpeechRecognitionAlternativeLike = { transcript?: string };
+type SpeechRecognitionResultLike = { isFinal: boolean } & ArrayLike<SpeechRecognitionAlternativeLike>;
+type SpeechRecognitionEventLike = { resultIndex: number; results: ArrayLike<SpeechRecognitionResultLike> };
+type SpeechRecognitionErrorEventLike = { error?: string };
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 function metaLabel(meta: Record<string, unknown>): string[] {
   const parts: string[] = [];
@@ -99,6 +116,19 @@ export function InterviewPracticePage() {
   const [refineBusy, setRefineBusy] = useState<Record<string, boolean>>({});
   const [feedbackSavedNotice, setFeedbackSavedNotice] = useState<Record<string, boolean>>({});
 
+  const [listeningForQuestion, setListeningForQuestion] = useState<string | null>(null);
+  const [voiceErrorByQuestion, setVoiceErrorByQuestion] = useState<Record<string, string>>({});
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const activeQuestionIdRef = useRef<string | null>(null);
+  const voiceBaseRef = useRef<string>("");
+  const voiceFinalRef = useRef<string>("");
+
+  const speechSupported = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+    return Boolean(w.SpeechRecognition || w.webkitSpeechRecognition);
+  }, []);
+
   const [mainTab, setMainTab] = useState<"practice" | "history">("practice");
   const [historySessions, setHistorySessions] = useState<InterviewPracticeSessionResponse[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
@@ -118,6 +148,112 @@ export function InterviewPracticePage() {
       cancelled = true;
     };
   }, []);
+
+  const stopVoice = useCallback(() => {
+    const activeId = activeQuestionIdRef.current;
+    const rec = recognitionRef.current;
+    recognitionRef.current = null;
+    activeQuestionIdRef.current = null;
+    voiceBaseRef.current = "";
+    voiceFinalRef.current = "";
+    setListeningForQuestion(null);
+    if (activeId) setVoiceErrorByQuestion((m) => ({ ...m, [activeId]: "" }));
+    if (rec) {
+      try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.stop();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  const startVoice = useCallback(
+    (questionId: string) => {
+      if (!speechSupported) {
+        setVoiceErrorByQuestion((m) => ({ ...m, [questionId]: "Voice input isn’t supported in this browser." }));
+        return;
+      }
+
+      // If already listening (same or different question), stop first.
+      stopVoice();
+
+      setVoiceErrorByQuestion((m) => ({ ...m, [questionId]: "" }));
+      setListeningForQuestion(questionId);
+      activeQuestionIdRef.current = questionId;
+      voiceBaseRef.current = draftByQuestion[questionId] ?? "";
+      voiceFinalRef.current = "";
+
+      const w = window as unknown as { SpeechRecognition?: SpeechRecognitionCtor; webkitSpeechRecognition?: SpeechRecognitionCtor };
+      const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+      if (!Ctor) {
+        setVoiceErrorByQuestion((m) => ({ ...m, [questionId]: "Voice input isn’t supported in this browser." }));
+        stopVoice();
+        return;
+      }
+
+      const rec = new Ctor();
+      recognitionRef.current = rec;
+
+      rec.lang = navigator.language || "en-US";
+      rec.interimResults = true;
+      rec.continuous = true;
+
+      rec.onresult = (event: SpeechRecognitionEventLike) => {
+        if (activeQuestionIdRef.current !== questionId) return;
+
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          const text = String(res?.[0]?.transcript ?? "");
+          if (!text) continue;
+          if (res.isFinal) voiceFinalRef.current += text;
+          else interim += text;
+        }
+
+        const combined = `${voiceBaseRef.current}${voiceFinalRef.current}${interim}`;
+        setDraftByQuestion((m) => ({ ...m, [questionId]: combined }));
+      };
+
+      rec.onerror = (event: SpeechRecognitionErrorEventLike) => {
+        if (activeQuestionIdRef.current !== questionId) return;
+        const code = String(event?.error ?? "");
+        const msg =
+          code === "not-allowed"
+            ? "Microphone permission blocked. Allow mic access and try again."
+            : code
+              ? `Voice input error: ${code}`
+              : "Voice input error.";
+        setVoiceErrorByQuestion((m) => ({ ...m, [questionId]: msg }));
+        stopVoice();
+      };
+
+      rec.onend = () => {
+        if (activeQuestionIdRef.current === questionId) stopVoice();
+      };
+
+      try {
+        rec.start();
+      } catch {
+        setVoiceErrorByQuestion((m) => ({ ...m, [questionId]: "Could not start voice input." }));
+        stopVoice();
+      }
+    },
+    [draftByQuestion, speechSupported, stopVoice],
+  );
+
+  useEffect(() => {
+    if (!listeningForQuestion) return;
+    if (submitBusy[listeningForQuestion] || refineBusy[listeningForQuestion]) stopVoice();
+  }, [listeningForQuestion, submitBusy, refineBusy, stopVoice]);
+
+  useEffect(() => {
+    return () => {
+      stopVoice();
+    };
+  }, [stopVoice]);
 
   const refreshLibraries = useCallback(async () => {
     if (!apiReady) return;
@@ -725,19 +861,49 @@ export function InterviewPracticePage() {
                       <label htmlFor={`ans-${q.id}`} className="text-sm font-medium leading-none">
                         Your answer
                       </label>
-                      <Textarea
-                        id={`ans-${q.id}`}
-                        rows={5}
-                        value={draftByQuestion[q.id] ?? ""}
-                        onChange={(e) =>
-                          setDraftByQuestion((m) => ({
-                            ...m,
-                            [q.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="Type your answer…"
-                        disabled={Boolean(submitBusy[q.id] || refineBusy[q.id])}
-                      />
+                      <div className="relative">
+                        <Textarea
+                          id={`ans-${q.id}`}
+                          rows={5}
+                          value={draftByQuestion[q.id] ?? ""}
+                          onChange={(e) =>
+                            setDraftByQuestion((m) => ({
+                              ...m,
+                              [q.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Type your answer…"
+                          disabled={Boolean(submitBusy[q.id] || refineBusy[q.id])}
+                          className={cn(speechSupported ? "pr-10" : undefined)}
+                        />
+                        {speechSupported ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-2 top-2 h-7 w-7"
+                            disabled={Boolean(submitBusy[q.id] || refineBusy[q.id])}
+                            aria-label={listeningForQuestion === q.id ? "Stop voice input" : "Start voice input"}
+                            title={listeningForQuestion === q.id ? "Stop voice input" : "Start voice input"}
+                            onClick={() => {
+                              if (listeningForQuestion === q.id) stopVoice();
+                              else startVoice(q.id);
+                            }}
+                          >
+                            {listeningForQuestion === q.id ? (
+                              <MicOff className="h-4 w-4" />
+                            ) : (
+                              <Mic className="h-4 w-4" />
+                            )}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {listeningForQuestion === q.id ? (
+                        <p className="text-muted-foreground text-xs">Listening…</p>
+                      ) : null}
+                      {voiceErrorByQuestion[q.id] ? (
+                        <p className="text-destructive text-xs">{voiceErrorByQuestion[q.id]}</p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button

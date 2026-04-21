@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { MessageCirclePlus, Trash2 } from "lucide-react";
 
 import { AppLogo } from "@/components/brand/app-logo";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { SessionResponse } from "@/lib/api";
 import { navActive } from "@/components/layout/app-nav";
 import { SidebarNavMenu } from "@/components/layout/sidebar-nav-menu";
@@ -277,6 +278,11 @@ export function ChatSidebarPanel({
       ) : (
         <div className="min-h-0 flex-1" aria-hidden />
       )}
+
+      <Separator className="bg-sidebar-border" />
+      <div className="flex items-center justify-center px-3 py-3">
+        <ThemeToggle />
+      </div>
 
       <Dialog
         open={pendingDeleteId != null}

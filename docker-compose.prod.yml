@@ -1,0 +1,40 @@
+services:
+  # Reverse proxy: expose only 80 to the public internet.
+  # (Add 443 later if you attach a real domain and want HTTPS.)
+  reverse-proxy:
+    image: caddy:2-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+  postgres:
+    # Do not expose database to the public internet in production.
+    ports: []
+
+  redis:
+    # Do not expose redis to the public internet in production.
+    ports: []
+
+  backend:
+    # Only reachable via reverse-proxy inside the Docker network.
+    ports: []
+
+  mcp-interview-tools:
+    # Only reachable by crewai-interview-worker inside the Docker network.
+    ports: []
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Use same-origin API via reverse-proxy: browser calls /api/...
+        NEXT_PUBLIC_API_BASE_URL: ""
+    ports: []
+

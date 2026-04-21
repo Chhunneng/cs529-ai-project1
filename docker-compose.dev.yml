@@ -32,6 +32,9 @@ services:
       - ./backend:/app
 
   frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     volumes:
       - ./frontend:/app
       - frontend_dev_node_modules:/app/node_modules

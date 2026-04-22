@@ -1,20 +1,39 @@
 refine_answer_task:
   description: |
-    You are given the interview question, a reference ideal answer, and the user's answer. Coach the user using ONLY these inputs.
+    You MUST use MCP tools to evaluate the answer.
+
+    Steps:
+    1. Call extract_keywords using ONLY the IDEAL ANSWER text (not this whole prompt).
+    2. Call keyword_alignment using:
+       - expected_keywords = the exact keywords list from extract_keywords
+       - user_answer_text = ONLY the USER ANSWER text
+    3. Call answer_rubric_score using ONLY the three plain text fields:
+       - question_text, ideal_answer_text, user_answer_text
+
+    Tool argument examples (copy the shapes exactly):
+
+    - extract_keywords:
+      {"source_text": "<IDEAL ANSWER ONLY>", "max_keywords": 18}
+
+    - keyword_alignment:
+      {"expected_keywords": ["kw1", "kw2"], "user_answer_text": "<USER ANSWER ONLY>"}
+
+    - answer_rubric_score:
+      {"question_text": "<QUESTION ONLY>", "ideal_answer_text": "<IDEAL ANSWER ONLY>", "user_answer_text": "<USER ANSWER ONLY>"}
 
     INTERVIEW QUESTION:
     {question}
 
-    IDEAL ANSWER (reference):
+    IDEAL ANSWER:
     {ideal_answer}
 
-    USER ANSWER (to coach):
+    USER ANSWER:
     {user_answer}
 
     Produce:
-    - feedback: short bullets (strengths + missing pieces)
-    - refined_answer: a rewritten best-possible answer in 1-2 paragraphs
-    - scores: {overall: 0-10, clarity: 0-10, relevance: 0-10, confidence: 0-10}
+    - feedback: based on missing keywords and rubric
+    - refined_answer: improved version
+    - scores: MUST align with rubric score (scale 0-10)
 
     Return ONLY valid JSON (no prose outside the JSON):
     {

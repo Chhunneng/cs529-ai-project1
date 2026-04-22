@@ -3,9 +3,23 @@ refine_answer_task:
     You MUST use MCP tools to evaluate the answer.
 
     Steps:
-    1. Call extract_keywords on the IDEAL ANSWER
-    2. Call keyword_alignment using extracted keywords and USER ANSWER
-    3. Call answer_rubric_score using QUESTION, IDEAL ANSWER, USER ANSWER
+    1. Call extract_keywords using ONLY the IDEAL ANSWER text (not this whole prompt).
+    2. Call keyword_alignment using:
+       - expected_keywords = the exact keywords list from extract_keywords
+       - user_answer_text = ONLY the USER ANSWER text
+    3. Call answer_rubric_score using ONLY the three plain text fields:
+       - question_text, ideal_answer_text, user_answer_text
+
+    Tool argument examples (copy the shapes exactly):
+
+    - extract_keywords:
+      {"source_text": "<IDEAL ANSWER ONLY>", "max_keywords": 18}
+
+    - keyword_alignment:
+      {"expected_keywords": ["kw1", "kw2"], "user_answer_text": "<USER ANSWER ONLY>"}
+
+    - answer_rubric_score:
+      {"question_text": "<QUESTION ONLY>", "ideal_answer_text": "<IDEAL ANSWER ONLY>", "user_answer_text": "<USER ANSWER ONLY>"}
 
     Use the tool outputs to generate your response.
 

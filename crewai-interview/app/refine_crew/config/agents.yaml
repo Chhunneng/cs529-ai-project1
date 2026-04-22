@@ -9,9 +9,9 @@ answer_coach:
     You MUST use MCP tools when available.
 
     Required behavior:
-    1. Use extract_keywords on the ideal answer
-    2. Use keyword_alignment to compare with the user answer
-    3. Use answer_rubric_score to compute evaluation
+    1. Use extract_keywords with {"source_text": <IDEAL ANSWER ONLY>}
+    2. Use keyword_alignment with {"expected_keywords": <keywords from extract_keywords>, "user_answer_text": <USER ANSWER ONLY>}
+    3. Use answer_rubric_score with {"question_text": <QUESTION ONLY>, "ideal_answer_text": <IDEAL ANSWER ONLY>, "user_answer_text": <USER ANSWER ONLY>}
 
     You are NOT allowed to skip tool usage.
     You MUST base your feedback and scores on tool outputs.

@@ -7,6 +7,9 @@ from fastmcp import FastMCP
 
 mcp = FastMCP("InterviewTools")
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 
 _STOPWORDS = {
     "a",
@@ -51,6 +54,8 @@ def extract_keywords(text: str, max_keywords: int = 20) -> dict:
 
     This is intentionally lightweight and deterministic (no LLM).
     """
+    print(">>> MCP TOOL CALLED: extract_keywords")
+    logging.info("MCP TOOL CALLED: extract_keywords")
     max_k = max(3, min(int(max_keywords), 60))
     counts = Counter(_tokens(text))
     keywords = [w for w, _ in counts.most_common(max_k)]
@@ -60,6 +65,8 @@ def extract_keywords(text: str, max_keywords: int = 20) -> dict:
 @mcp.tool()
 def keyword_alignment(keywords: list[str], answer_text: str) -> dict:
     """Check which keywords appear in the answer."""
+    print(">>> MCP TOOL CALLED: keyword_alignment")
+    logging.info("MCP TOOL CALLED: keyword_alignment")
     kws = [str(k).strip().lower() for k in (keywords or []) if str(k).strip()]
     kws = list(dict.fromkeys(kws))  # de-dupe, preserve order
     ans = (answer_text or "").lower()
@@ -72,6 +79,8 @@ def keyword_alignment(keywords: list[str], answer_text: str) -> dict:
 @mcp.tool()
 def answer_rubric_score(question: str, ideal_answer: str, user_answer: str) -> dict:
     """Heuristic rubric score based on overlap with ideal answer keywords."""
+    print(">>> MCP TOOL CALLED: answer_rubric_score")
+    logging.info("MCP TOOL CALLED: extract_keywords")
     ideal_kws = extract_keywords(ideal_answer, max_keywords=18).get("keywords", [])
     align = keyword_alignment(ideal_kws, user_answer)
     base = float(align.get("score") or 0.0)

@@ -1,22 +1,29 @@
 refine_answer_task:
   description: |
-    You are given the interview question, a reference ideal answer, and the user's answer. Coach the user using ONLY these inputs.
+    You MUST use MCP tools to evaluate the answer.
+
+    Steps:
+    1. Call extract_keywords on the IDEAL ANSWER
+    2. Call keyword_alignment using extracted keywords and USER ANSWER
+    3. Call answer_rubric_score using QUESTION, IDEAL ANSWER, USER ANSWER
+
+    Use the tool outputs to generate your response.
 
     INTERVIEW QUESTION:
     {question}
 
-    IDEAL ANSWER (reference):
+    IDEAL ANSWER:
     {ideal_answer}
 
-    USER ANSWER (to coach):
+    USER ANSWER:
     {user_answer}
 
     Produce:
-    - feedback: short bullets (strengths + missing pieces)
-    - refined_answer: a rewritten best-possible answer in 1-2 paragraphs
-    - scores: {overall: 0-10, clarity: 0-10, relevance: 0-10, confidence: 0-10}
+    - feedback: based on missing keywords and rubric
+    - refined_answer: improved version
+    - scores: MUST align with rubric score (scale 0-10)
 
-    Return ONLY valid JSON (no prose outside the JSON):
+    Return ONLY valid JSON:
     {
       "feedback": "- ...\n- ...",
       "refined_answer": "...",

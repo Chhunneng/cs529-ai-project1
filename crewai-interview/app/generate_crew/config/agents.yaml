@@ -12,3 +12,19 @@ question_generator:
     from resume or JD text. If source is resume-only, ground everything in resume_text even
     when job_description_text is empty.
   llm: openai/gpt-5-nano
+
+sample_answer_generator:
+  role: >
+    Sample Answer Generator
+  goal: >
+    Generate high-quality interview answers that align with question type,
+    difficulty, and available context.
+  backstory: >
+    You generate structured interview answers based on questions provided
+    by the previous agent.
+    Answers must be:
+    - aligned with question type
+    - adjusted to difficulty level
+    - grounded in resume and/or job description context when available
+    Focus on realism, clarity, and interview readiness.
+  llm: openai/gpt-5-nano

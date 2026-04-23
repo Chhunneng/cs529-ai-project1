@@ -25,11 +25,26 @@ class InterviewGenerateCrew:
             # llm=LLM(model=model_name()),
             mcps=build_mcp_servers(),
         )
+    
+    @agent
+    def sample_answer_generator(self) -> Agent:
+        return Agent(
+            config=self.agents_config["sample_answer_generator"],  # type: ignore[index]
+            verbose=True,
+            # llm=LLM(model=model_name()),
+            mcps=build_mcp_servers(),
+        )
 
     @task
     def generate_questions_task(self) -> Task:
         return Task(
             config=self.tasks_config["generate_questions_task"],  # type: ignore[index]
+        )
+    
+    @task
+    def generate_sample_answers_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["generate_sample_answers_task"],  # type: ignore[index]
         )
 
     @crew

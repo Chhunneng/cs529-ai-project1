@@ -12,7 +12,7 @@ generate_questions_task:
     - resume_text: required when source is "resume" or "both".
 
     SOURCE RULES:
-    - source "resume": Use ONLY resume_text to tailor questions and sample answers. Do not require a job description.
+    - source "resume": Use ONLY resume_text to tailor questions. Do not require a job description.
     - source "jd": Use job_description_text; resume may be empty.
     - source "both": Use both texts together.
 
@@ -31,10 +31,54 @@ generate_questions_task:
     OUTPUT FORMAT:
     Each item must include:
     - prompt: must clearly match the chosen question_style (technical vs behavioral, etc.)
-    - sample_answer: aligned to source; for technical style, include concrete technical substance
     - metadata: { "type": "...", "difficulty": "...", "skills": ["..."] } matching the rules above.
 
     Return ONLY valid JSON (no prose outside the JSON):
+    {
+      "questions": [
+        {
+          "prompt": "...",
+          "metadata": {"type": "technical", "difficulty": "hard", "skills": ["..."]}
+        }
+      ]
+    }
+    The sample metadata values in the example are ILLUSTRATIVE: you MUST set type and difficulty to match
+    question_style={question_style} and level={level} for every row—do not copy behavioral/medium by default.
+  expected_output: >
+    JSON object with key "questions" (array of length {count}); each element has prompt and metadata whose type and difficulty match the user’s question_style and level.
+  agent: question_generator
+
+generate_sample_answers_task:
+  description: |
+    You are given interview questions with metadata.
+
+    INPUT:
+    - questions (prompt + metadata with type and difficulty)
+    - resume_text (optional)
+    - job_description_text (optional)
+
+    TASK:
+    Generate sample_answer for each question.
+
+    CONTEXT USAGE:
+    - Use resume_text for real experience grounding (if available)
+    - Use job_description_text for role alignment (if available)
+    - If both exist, combine naturally
+
+    STYLE:
+    - technical → deep explanation, systems thinking, tradeoffs
+    - behavioral → structured storytelling (STAR optional)
+    - mixed → hybrid response
+
+    DIFFICULTY:
+    - easy → short answer
+    - medium → balanced answer
+    - hard → deep technical answer
+
+    If metadata.difficulty exists:
+    - follow it strictly
+
+    OUTPUT:
     {
       "questions": [
         {
@@ -44,9 +88,9 @@ generate_questions_task:
         }
       ]
     }
-    The sample metadata values in the example are ILLUSTRATIVE: you MUST set type and difficulty to match
-    question_style={question_style} and level={level} for every row—do not copy behavioral/medium by default.
+  context:
+    - generate_questions_task
   expected_output: >
     JSON object with key "questions" (array of length {count}); each element has prompt, sample_answer,
     and metadata whose type and difficulty match the user’s question_style and level.
-  agent: question_generator
+  agent: sample_answer_generator
